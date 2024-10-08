@@ -29,7 +29,7 @@ Dataset: Find the preprocessed dataset named "QM92014.zip" in the link [OSF](htt
 
 Step 1: train llm and generate 1D molecule sequences
 
-```python
+```bash
 {
 export CUDA_VISIBLE_DEVICES='0,1';
 python llm_train.py  \
@@ -53,7 +53,7 @@ After training, find the generated smiles file in the log folder.
 
 Step 2: train diffusion model and generate 3D conformers (with 8 A100 GPUs)
 
-```python
+```bash
 {
 python train_uncond_gene.py  \
     --dataset "QM9-jodo" \
@@ -83,7 +83,7 @@ Dataset: We use the dataset split provided by [JODO](https://github.com/GRAPH-0/
 
 Step 1: train llm and generate 1D molecule sequences
 
-```python
+```bash
 {
 python llm_train.py  \
     --dataset "GeomDrugs-JODO" \
@@ -106,7 +106,7 @@ After training, find the generated smiles file in the log folder.
 
 Step 2: train diffusion model and generate 3D conformers (with 8 A100 GPUs)
 
-```python
+```bash
 {
 python train_uncond_gene.py  \
     --dataset "GeomDrugs-JODO" \
@@ -138,15 +138,15 @@ Dataset: Find the preprocessed dataset named "GEOM-QM9.zip" in the link [OSF](ht
 
 **Stage 1: DMT training**
 
-```python
-python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --batch_size 256 --num_workers 4 --max_epochs 2000 --mode train --diff_version dgt --save_every_n_epochs 50  --filename 'dmt-b-qm9' --llm_model "./all_checkpoints/mollama/"  --test_conform_epoch 50 --conform_eval_epoch 50 --generate_eval_epoch 50  --sampling_steps 100
+```bash
+python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --batch_size 256 --num_workers 4 --max_epochs 2000 --mode train --save_every_n_epochs 50  --filename 'dmt-b-qm9' --llm_model "./all_checkpoints/mollama/"  --test_conform_epoch 50 --conform_eval_epoch 50 --generate_eval_epoch 50  --sampling_steps 100
 ```
 
 **Stage 2 and Stage 3:** 
 
 Given the pretrained checkpoint, save it at `all_checkpoints/dmt_b_qm9.ckpt`, you can leverage it for integration with the MoLlama:
 
-```python
+```bash
 python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --batch_size 256 --num_workers 4 --max_epochs 500 --mode train --save_every_n_epochs 50 --filename "dmt-b-llm-qm9"  --llm_model "./all_checkpoints/mollama/" --test_conform_epoch 50 --conform_eval_epoch 50 --check_val_every_n_epoch 5  --generate_eval_epoch 50 --sampling_steps 100 --use_llm  --delta_train --rand_smiles canonical --use_self_att_proj --llm_jk mean --use_llm_projector --llm_tune lora --tune_embedding --use_flash_attention --diff_ckpt "all_checkpoints/dmt_b_qm9.ckpt";
 ```
 
@@ -160,7 +160,7 @@ Dataset: Find the preprocessed dataset named "GEOM-DRUGS.zip" in the link [OSF](
 
 **Stage 1: DMT training (DMT-L)**
 
-```python
+```bash
 {
 python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --in_node_features 74  --warmup_steps 1000 --batch_size 32 --num_workers 2 --max_epochs 16000 --mode train --save_every_n_epochs 200 --n_blocks 12 --hidden_size 768  --filename "dmt-l-drugs"    --llm_model "./all_checkpoints/mollama/"  --test_conform_epoch 100000 --conform_eval_epoch 100000 --check_val_every_n_epoch 20 --generate_eval_epoch 100000 --sampling_steps 100 --world_size 8 --accumulate_grad_batches 2;
 exit
@@ -171,8 +171,38 @@ Notice that, you will need to stop the training manually at the 3000 epoch.
 
 **Stage 2 and Stage 3:** Given the pretrained checkpoint, save it at `all_checkpoints/dmt_l_drugs.ckpt`, you can leverage it for integration training (both stage 2 and stage 3) with the MoLlama:
 
-```python
+```bash
 python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --in_node_features 74 --batch_size 256 --num_workers 4 --max_epochs 500 --mode train --save_every_n_epochs 50 --filename "dmt-b-llm-qm9"  --n_blocks 12 --hidden_size 768 --llm_model "./all_checkpoints/mollama/" --test_conform_epoch 10000 --conform_eval_epoch 10000 --check_val_every_n_epoch 5  --generate_eval_epoch 10000 --sampling_steps 100 --use_llm  --delta_train --rand_smiles canonical --use_self_att_proj --llm_jk mean --use_llm_projector --llm_tune lora --tune_embedding --use_flash_attention --diff_ckpt "all_checkpoints/dmt_l_drugs.ckpt" --world_size 8 --accumulate_grad_batches 2;
 ```
 
 You can similarly train DMT-B for GEOM-DRUGS by removing the `--n_blocks 12 --hidden_size 768` command from the scripts above.
+
+
+## Eval Our Pretrained Checkpoint
+
+### 3D Conformer Prediction
+
+**GEOM-QM9 dataset**
+
+Download our pretrained DMT-B checkpoints from the following link [OSF](https://osf.io/gqy39/?view_only=5905ef8957f9444a8808fd49933b35c7). Download it and save it at `all_checkpoints/qm9_dmt_b_e1999.ckpt` (using 2 GPUs).
+
+```bash
+export CUDA_VISIBLE_DEVICES='0,1';
+python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --infer_batch_size 512 --num_workers 4 --mode eval_test_conform  --filename 'eval_dmt_b_qm9' --llm_model "./all_checkpoints/mollama/"  --sampling_steps 100 --init_checkpoint "all_checkpoints/qm9_dmt_b_e1999.ckpt" --dropout 0.05;
+```
+
+**GEOM-DRUGS dataset**
+
+Download our pretrained DMT-L checkpoints from the following link [OSF](https://osf.io/gqy39/?view_only=5905ef8957f9444a8808fd49933b35c7). Download it and save it at `all_checkpoints/drugs_dmt_l_e2999.ckpt` (using 2 GPUs). 
+
+```bash
+export CUDA_VISIBLE_DEVICES='0,1';
+python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --num_workers 4--mode eval_test_conform --filename "eval_dmt_l_drugs" --llm_model "./all_checkpoints/mollama/" --in_node_features 74 --init_checkpoint "all_checkpoints/drugs_dmt_l_e2999.ckpt" --save_eval_only --infer_batch_size 512 --world_size 2 --load_test_only --dropout 0.05;
+```
+
+The prediction results will be saved under `all_checkpoints/eval_dmt_l_drugs/lightning_logs` as a pickle file. Because the GEOM-DRUGS dataset is too large, we need to run separate evaluation command to obtain the evaluation results:
+
+```bash
+python eval_confs.py --input all_checkpoints/eval_dmt_l_drugs/lightning_logs/version_0/predict.pkl --dataset Geom-drugs-df --root "./data/GEOM-DRUGS"
+```
+
