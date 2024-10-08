@@ -184,7 +184,7 @@ You can similarly train DMT-B for GEOM-DRUGS by removing the `--n_blocks 12 --hi
 
 **GEOM-QM9 dataset**
 
-Download our pretrained DMT-B checkpoints from the following link [OSF](https://osf.io/gqy39/?view_only=5905ef8957f9444a8808fd49933b35c7). Download it and save it at `all_checkpoints/qm9_dmt_b_e1999.ckpt` (using 2 GPUs).
+Download our pretrained DMT-B checkpoints from the following link [OSF](https://osf.io/gqy39/?view_only=5905ef8957f9444a8808fd49933b35c7). Download it and save it at `all_checkpoints/qm9_dmt_b_e1999.ckpt`. The evaluation script with 2 GPUs is:
 
 ```bash
 export CUDA_VISIBLE_DEVICES='0,1';
@@ -193,7 +193,7 @@ python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --infer_batc
 
 **GEOM-DRUGS dataset**
 
-Download our pretrained DMT-L checkpoints from the following link [OSF](https://osf.io/gqy39/?view_only=5905ef8957f9444a8808fd49933b35c7). Download it and save it at `all_checkpoints/drugs_dmt_l_e2999.ckpt` (using 2 GPUs). 
+Download our pretrained DMT-L checkpoints from the following link [OSF](https://osf.io/gqy39/?view_only=5905ef8957f9444a8808fd49933b35c7). Download it and save it at `all_checkpoints/drugs_dmt_l_e2999.ckpt`. The evaluation script with 2 GPUs is:
 
 ```bash
 export CUDA_VISIBLE_DEVICES='0,1';
