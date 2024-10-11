@@ -75,7 +75,12 @@ def set_embed_tokens_trainable(model):
             print(name, 'requires_grad = True')
 
 
-def obtain_loss_and_ppl(logits, labels, attn_mask, return_nll=False):
+def obtain_loss_and_ppl(logits, labels, attn_mask, return_nll=False, context_length=0):
+    if context_length > 0:
+        logits = logits[:, context_length:, :]
+        labels = labels[:, context_length:]
+        attn_mask = attn_mask[:, context_length:]
+
     shift_attention_mask_batch = attn_mask[..., 1:].contiguous()
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
@@ -106,8 +111,6 @@ class LLMPL(L.LightningModule):
         max_iters = self.args.max_epochs * len(self.trainer.train_dataloader)
         if self.args.scheduler == 'linear_warmup_cosine_lr':
             self.scheduler = LinearWarmupCosineLRSchedulerV2(optimizer, max_iters, self.args.min_lr, self.args.init_lr, warmup_steps, self.args.warmup_lr)
-        # elif self.args.scheduler == 'linear_warmup_step_lr':
-        #     self.scheduler = LinearWarmupStepLRScheduler(optimizer, self.args.max_epochs, self.args.min_lr, self.args.init_lr, self.args.lr_decay_rate, self.args.warmup_lr, warmup_steps)
         elif self.args.scheduler == 'None':
             self.scheduler = None
         else:
@@ -163,12 +166,18 @@ class LLMPL(L.LightningModule):
             raise NotImplementedError()
         return llm_model
 
+    def create_condition_prompt(self, context):
+        batch_size = context.shape[0]
+        context = context.unsqueeze(1)  # [batch_size, 1]
+        out = self.condition_mlp(context)  # [batch_size, 4 * hidden_size]
+        return out.view(batch_size, 4, self.hidden_size)
+
     def resize_token_embeddings(self, tokenizer=None):
         if tokenizer is None:
             tokenizer = self.tokenizer
         self.llm_model.resize_token_embeddings(len(tokenizer))
 
-    def __init__(self, args, tokenizer=None, max_sf_tokens=30):
+    def __init__(self, args, tokenizer=None, max_sf_tokens=30, property_distribution=None):
         super().__init__()
         if isinstance(args, dict):
             args = AttrDict(**args)
@@ -186,6 +195,16 @@ class LLMPL(L.LightningModule):
 
         self.delta_train = False
         self.resize_token_embeddings(self.tokenizer)
+
+        self.hidden_size = self.llm_model.config.hidden_size
+        self.condition_mlp = torch.nn.Sequential(
+            torch.nn.Linear(1, self.hidden_size * 4),
+            torch.nn.GELU(),
+            torch.nn.Linear(self.hidden_size * 4, 4 * self.hidden_size)
+        )
+
+        self.property_distribution = property_distribution
+
         self.save_hyperparameters(args)
 
     def training_step(self, batch, batch_idx):
@@ -254,14 +273,16 @@ class LLMPL(L.LightningModule):
         if not self.trainer.is_global_zero:
             return
 
-        sampled_smiles = self.sample_molecules()
-        
+        sampled_sequences = self.sample_molecules()
+
         if self.args.skip_eval:
             return
 
+
+        smiles_without_chirality_list = [results_tuple[2] for results_tuple in sampled_sequences]
         ## compute the moses metrics
-        sampled_rdmols = [Chem.MolFromSmiles(orig_smiles) for cano_smiles, orig_smiles in sampled_smiles]
-        sampled_rdmols = [Chem.AddHs(mol) for mol in sampled_rdmols]
+        sampled_rdmols = [Chem.MolFromSmiles(smiles_without_chirality) for smiles_without_chirality in smiles_without_chirality_list]
+        sampled_rdmols = [Chem.AddHs(mol) for mol in sampled_rdmols if mol is not None]
         eval_results_2d = get_2D_edm_metric(sampled_rdmols, self.trainer.datamodule.train_rdmols)
         self.log('MolStable', eval_results_2d['mol_stable'], rank_zero_only=True)
         self.log('AtomStable', eval_results_2d['atom_stable'], rank_zero_only=True)
@@ -289,22 +310,23 @@ class LLMPL(L.LightningModule):
         sample_num = self.args.sample_num
         print('sample_num:', sample_num)
         loop_count = 0
-        sampled_smiles = [] # we use smiles as the intermediate data structure for its easy conversion to rdkit mol
+        sampled_sequences = [] # we use smiles as the intermediate data structure for its easy conversion to rdkit mol
         pbar = tqdm(total=sample_num, desc='sample molecules sequences')
+
         while True:
-            sf_list = self.sample_selfies(
+            sf_list, context = self.sample_selfies(
                 batch_size=200,
                 num_beams=self.args.num_beams,
                 temperature=self.args.temperature,
                 num_output=1,
                 max_length=self.max_sf_tokens - 1) # -1 for the bos token, which is already included
 
-            canon_list = [canonicalize_selfies(item) for item in sf_list]
-            smiles_list = []
-            for canon_selfies, canon_smiles, orig_smiles in canon_list:
-                if not canon_selfies:
+            tuple_list = [reencode_selfies(item) for item in sf_list]
+            tuple_list_valid = []
+            for index, (selfies, smiles_with_chirality, smiles_without_chirality) in enumerate(tuple_list):
+                if not selfies:
                     continue
-                selfies_tokens = sf.split_selfies(canon_selfies)
+                selfies_tokens = sf.split_selfies(selfies)
                 skip = False
                 for token in selfies_tokens:
                     if token not in self.tokenizer.vocab:
@@ -312,35 +334,70 @@ class LLMPL(L.LightningModule):
                         break
                 if skip:
                     continue
-                smiles_list.append((canon_smiles, orig_smiles))
+                if context is not None:
+                    tuple_list_valid.append((selfies, smiles_with_chirality, smiles_without_chirality, context[index]))
+                else:
+                    tuple_list_valid.append((selfies, smiles_with_chirality, smiles_without_chirality))
 
-            sampled_smiles.extend(smiles_list)
+            sampled_sequences.extend(tuple_list_valid)
             loop_count += 1
-            pbar.update(len(sampled_smiles)-pbar.n)
-            if len(sampled_smiles) >= sample_num:
+            pbar.update(len(tuple_list_valid))
+            pbar.set_postfix(loop_count=loop_count)
+            if len(sampled_sequences) >= sample_num:
                 pbar.close()
                 break
-        print(f'loop count: {loop_count}')
-        sampled_smiles = list(sampled_smiles)[:sample_num]
-        sampled_smiles.sort()
+
+        sampled_sequences = list(sampled_sequences)[:sample_num]
+        sampled_sequences.sort()
 
         log_dir = Path(self.logger.log_dir)
-        ## save the sampled smiles
-        save_path = log_dir / f'smiles_epoch{self.current_epoch}.txt'
-        with save_path.open('w', encoding='utf8') as f:
-            for canon_smiles, orig_smiles in sampled_smiles:
-                f.write(f'{canon_smiles}\t{orig_smiles}' + '\n')
-        return sampled_smiles
+        ## save the sampled sequences
+        if self.args.condition_property is None:
+            save_path = log_dir / f'sequences_epoch{self.current_epoch}.txt'
+            with save_path.open('w', encoding='utf8') as f:
+                for selfies, smiles_with_chirality, smiles_without_chirality in sampled_sequences:
+                    f.write(f'{selfies}\t{smiles_with_chirality}\t{smiles_without_chirality}' + '\n')
+        else:
+            save_path = log_dir / f'sequences_epoch{self.current_epoch}_{self.args.condition_property}.txt'
+            with save_path.open('w', encoding='utf8') as f:
+                for selfies, smiles_with_chirality, smiles_without_chirality, context in sampled_sequences:
+                    f.write(f'{selfies}\t{smiles_with_chirality}\t{smiles_without_chirality}\t{context}' + '\n')
+
+        return sampled_sequences
 
 
     def forward(self, selfies_batch):
-        targets = selfies_batch.input_ids.masked_fill(~selfies_batch.attention_mask.bool(), -100)
-        outputs = self.llm_model(input_ids=selfies_batch.input_ids,
-                                attention_mask=selfies_batch.attention_mask,
-                                return_dict=True,
-                                # labels=targets,
-                                output_hidden_states=True)
-        lm_loss, avg_nll = obtain_loss_and_ppl(outputs.logits, targets, selfies_batch.attention_mask, True)
+        if hasattr(selfies_batch, "context"):
+            context_length = 4
+            token_embeds = self.llm_model.get_input_embeddings()(selfies_batch.input_ids)
+            condition_embeds = self.create_condition_prompt(selfies_batch.context)
+            inputs_embeds = torch.cat([condition_embeds, token_embeds], dim=1)
+            soft_prompt_attention = torch.ones((selfies_batch.attention_mask.shape[0], context_length),
+                                            device=selfies_batch.attention_mask.device)
+            attention_mask = torch.cat([soft_prompt_attention, selfies_batch.attention_mask], dim=1)
+
+            ignore_prefix = torch.full((selfies_batch.input_ids.shape[0], 4), -100,
+                                    device=selfies_batch.input_ids.device)
+            targets = torch.cat([ignore_prefix, selfies_batch.input_ids], dim=1)
+            targets = targets.masked_fill(~attention_mask.bool(), -100)
+
+            outputs = self.llm_model(inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                return_dict=True,
+                # labels=target,
+                output_hidden_states=True)
+        else:
+            context_length = 0
+            input_ids = selfies_batch.input_ids
+            attention_mask = selfies_batch.attention_mask
+            targets = selfies_batch.input_ids.masked_fill(~selfies_batch.attention_mask.bool(), -100)
+            outputs = self.llm_model(input_ids=input_ids,
+                attention_mask=attention_mask,
+                return_dict=True,
+                # labels=targets,
+                output_hidden_states=True)
+
+        lm_loss, avg_nll = obtain_loss_and_ppl(outputs.logits, targets, attention_mask, True, context_length)
         return lm_loss, avg_nll
 
 
@@ -384,7 +441,6 @@ class LLMPL(L.LightningModule):
         parser.add_argument('--init_checkpoint', type=str, default=None)
         parser.add_argument('--skip_eval', action='store_true', default=False)
 
-        ## add unimol-conf config
         return parent_parser
 
     def sample_selfies(
@@ -399,18 +455,45 @@ class LLMPL(L.LightningModule):
         bos_token_id = self.tokenizer.bos_token_id
         eos_token_id = self.tokenizer.eos_token_id
 
-        input_ids = torch.LongTensor([[bos_token_id] for _ in range(batch_size)]).to(self.device)
-        outputs = self.llm_model.generate(
-            input_ids=input_ids,
-            do_sample=True,
-            temperature=temperature,
-            num_beams=num_beams,
-            max_new_tokens=max_length,
-            min_length=1,
-            eos_token_id=eos_token_id,
-            num_return_sequences=num_output)
+        if self.property_distribution is not None:
+            context = self.property_distribution.sample_batch(batch_size).to(self.device)
+        else:
+            context = None
+
+        if context is not None:
+            condition_embeds = self.create_condition_prompt(context)
+            input_embeds = self.llm_model.get_input_embeddings()(torch.LongTensor([[bos_token_id]]).to(self.device))
+            inputs_embeds = torch.cat([condition_embeds, input_embeds.repeat(batch_size, 1, 1)], dim=1)
+            attention_mask = torch.ones((batch_size, inputs_embeds.shape[1]), device=self.device)
+            outputs = self.llm_model.generate(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                do_sample=True,
+                temperature=temperature,
+                num_beams=num_beams,
+                max_new_tokens=max_length,
+                min_length=1,
+                eos_token_id=eos_token_id,
+                num_return_sequences=num_output,
+                use_cache=True
+            )
+        else:
+            input_ids = torch.LongTensor([[bos_token_id] for _ in range(batch_size)]).to(self.device)
+            outputs = self.llm_model.generate(
+                input_ids=input_ids,
+                do_sample=True,
+                temperature=temperature,
+                num_beams=num_beams,
+                max_new_tokens=max_length,
+                min_length=1,
+                eos_token_id=eos_token_id,
+                num_return_sequences=num_output
+            )
+
         output_text = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        return output_text
+        if context is not None:
+            return output_text, context.squeeze(1).tolist()
+        return output_text, None
 
 
 def canonicalize_selfies(selfies):
@@ -421,3 +504,14 @@ def canonicalize_selfies(selfies):
     except Exception:
         return '', '', ''
     return canon_selfies, canon_smiles, smiles
+
+def reencode_selfies(selfies):
+    decoded_smiles = sf.decoder(selfies)
+    try:
+        molecule = Chem.MolFromSmiles(decoded_smiles)
+        smiles_with_chirality = Chem.MolToSmiles(molecule, kekuleSmiles=True)
+        reencoded_selfies = sf.encoder(smiles_with_chirality)
+        smiles_without_chirality = Chem.MolToSmiles(molecule, isomericSmiles=False)
+    except Exception:
+        return '', '', ''
+    return reencoded_selfies, smiles_with_chirality, smiles_without_chirality

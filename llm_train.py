@@ -50,12 +50,12 @@ def main(args):
     # model
     current_epoch = 0
     if args.init_checkpoint:
-        model = LLMPL.load_from_checkpoint(args.init_checkpoint, device=args.devices, strict=True, args=args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens)
+        model = LLMPL.load_from_checkpoint(args.init_checkpoint, device=args.devices, strict=True, args=args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens, property_distribution=dm.prop_dist)
         print(f"loading model from {args.init_checkpoint}")
         ckpt = torch.load(args.init_checkpoint, map_location='cpu')
         current_epoch = ckpt['epoch']
     else:
-        model = LLMPL(args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens)
+        model = LLMPL(args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens, property_distribution=dm.prop_dist)
 
     print('total params:', sum(p.numel() for p in model.parameters()))
 
@@ -72,7 +72,7 @@ def main(args):
                                          save_top_k=1,
                                          save_on_train_epoch_end=True,
                                          save_last='link',))
-    
+
     device_count = torch.cuda.device_count()
     if device_count > 1:
         print("multi-gpu training")
@@ -133,6 +133,7 @@ if __name__ == '__main__':
     parser = LLMPL.add_model_specific_args(parser)
     parser.add_argument('--dataset', type=str, default='QM9')
     parser = QM9DataModule.add_model_specific_args(parser)
+    parser.add_argument('--condition_property', type=str, default=None)
     args = parser.parse_args()
 
     print("=========================================")

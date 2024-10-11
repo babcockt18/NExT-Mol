@@ -8,6 +8,7 @@ import lightning as L
 from transformers import AutoTokenizer
 from model.help_funcs import AttrDict
 from model.diffusion_model_dgt import DGTDiffusion, remove_mean_with_mask
+from model.property_prediction.egnn import EGNN
 from data_provider.conf_gen_cal_metrics import set_rdmol_positions, get_best_rmsd
 import copy
 from evaluation.eval_functions import get_2D_edm_metric, get_3D_edm_metric, get_moses_metrics
@@ -170,7 +171,7 @@ class LLMProjector(nn.Module):
             encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_size, nhead=4, batch_first=True, norm_first=True, dropout=0.)
             self.self_att_proj = nn.TransformerEncoder(encoder_layer, num_layers=1)
             self.linear_proj = nn.Linear(in_dim, hidden_size)
-    
+
     def forward(self, hidden_states, rdmol2selfies, selfies_batch):
         if self.llm_jk == 'last':
             lm_embeds = hidden_states[-1] # shape = [batch_size, seq_len, hidden_size]
@@ -189,7 +190,7 @@ class LLMProjector(nn.Module):
         lm_x = lm_x / norm # shape = [batch_size, rdmol_len, hidden_size]
         return lm_x
 
-        
+
 
 class DiffussionPL(L.LightningModule):
     def set_trainble_params(self, param_list, delta_train):
@@ -274,6 +275,12 @@ class DiffussionPL(L.LightningModule):
             raise NotImplementedError()
         return llm_model
 
+    def create_condition_prompt(self, context):
+        batch_size = context.shape[0]
+        context = context.unsqueeze(1)  # [batch_size, 1]
+        out = self.condition_mlp(context)  # [batch_size, 4 * hidden_size]
+        return out.view(batch_size, 4, self.hidden_size)
+
     @classmethod
     def init_diffusion(cls, args, llm_dim=None):
         diffusion_model = DGTDiffusion(args, in_dim=llm_dim)
@@ -299,6 +306,20 @@ class DiffussionPL(L.LightningModule):
         else:
             raise NotImplementedError()
         return diffusion_model
+
+    @classmethod
+    def init_property_prediction(cls, args):
+        property_path = Path(f"data/property_classifier/evaluate_{args.condition_property}")
+        classifier_path = property_path / "best_checkpoint.npy"
+        args_classifier_path = property_path / "args.pickle"
+        with open(args_classifier_path, 'rb') as f:
+            args_classifier = pickle.load(f)
+        classifier = EGNN(in_node_nf=5, in_edge_nf=0, hidden_nf=args_classifier.nf, device='cpu', n_layers=args_classifier.n_layers, coords_weight=1.0, attention=args_classifier.attention, node_attr=args_classifier.node_attr)
+        classifier_state_dict = torch.load(classifier_path, map_location=torch.device('cpu'))
+        classifier.load_state_dict(classifier_state_dict)
+        for param in classifier.parameters():
+            param.requires_grad = False
+        return classifier
 
     def resize_token_embeddings(self, tokenizer=None):
         if tokenizer is None:
@@ -350,7 +371,7 @@ class DiffussionPL(L.LightningModule):
         return pos_loss
 
 
-    def __init__(self, args, tokenizer=None, max_sf_tokens=30, noise_scheduler=None, pos_std=None):
+    def __init__(self, args, tokenizer=None, max_sf_tokens=30, noise_scheduler=None, pos_std=None, property_normalizations=None, property_distribution=None):
         super().__init__()
         if isinstance(args, dict):
             args = AttrDict(**args)
@@ -398,7 +419,45 @@ class DiffussionPL(L.LightningModule):
                     self.linear_proj = nn.Linear(in_dim, args.hidden_size)
                     in_dim = args.hidden_size
 
+            self.hidden_size = self.llm_model.config.hidden_size
+            self.condition_mlp = nn.Sequential(
+                nn.Linear(1, self.hidden_size * 4),
+                nn.GELU(),
+                nn.Linear(self.hidden_size * 4, 4 * self.hidden_size)
+            )
+
+            if args.llm_ckpt is not None: # have trained llm
+                print(f"Loading llmpl model from: {args.llm_ckpt} ... ", end="")
+                llm_ckpt = torch.load(args.llm_ckpt, map_location='cpu')
+
+                with torch.no_grad():
+                    self.condition_mlp[0].weight.copy_(llm_ckpt['state_dict']['condition_mlp.0.weight'])
+                    self.condition_mlp[0].bias.copy_(llm_ckpt['state_dict']['condition_mlp.0.bias'])
+                    self.condition_mlp[2].weight.copy_(llm_ckpt['state_dict']['condition_mlp.2.weight'])
+                    self.condition_mlp[2].bias.copy_(llm_ckpt['state_dict']['condition_mlp.2.bias'])
+
+                print("Done.")
+
+                for param in self.condition_mlp.parameters():
+                    param.requires_grad = False
+
         self.diffusion_model = self.init_diffusion(args, in_dim)
+
+        if args.condition_property == None:
+            pass
+        elif args.condition_property in ['mu', 'alpha', 'homo', 'lumo', 'gap', 'Cv']:
+            self.condition_property = args.condition_property
+            assert property_normalizations is not None
+            assert property_distribution is not None
+            self.property_normalizations = property_normalizations
+            self.property_distribution = property_distribution
+            self.condition_property_mean = self.property_normalizations[self.condition_property]['mean']
+            self.condition_property_mad = self.property_normalizations[self.condition_property]['mad']
+            self.property_prediction_model = self.init_property_prediction(args).to(self.device)
+            property_output_norms = {'mu': 1., 'alpha': 1, 'homo': 1000., 'lumo': 1000., 'gap': 1000, 'Cv': 1.}
+            self.property_output_norm = property_output_norms[self.condition_property]
+        else:
+            raise NotImplementedError(f"{args.conditon} is not supported")
 
         self.delta_train = False
         self.save_hyperparameters(args)
@@ -409,11 +468,13 @@ class DiffussionPL(L.LightningModule):
         data_batch, selfies_batch = batch
         batch_size = len(data_batch.smiles)
         with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
-            loss, lm_loss, diff_loss = self.forward(data_batch, selfies_batch)
+            loss, lm_loss, diff_loss, MAE_loss = self.forward(data_batch, selfies_batch, data_batch.context)
         self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], sync_dist=True, batch_size=batch_size)
         self.log('train_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
         self.log('train_diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
         self.log('train_loss', loss, sync_dist=True, batch_size=batch_size)
+        if MAE_loss is not None:
+            self.log(f"train_MAE_loss_{self.condition_property}", MAE_loss, sync_dist=True, batch_size=batch_size)
         return loss
 
 
@@ -429,7 +490,7 @@ class DiffussionPL(L.LightningModule):
         if dataloader_idx == 0:
             train_epoch_condition = (self.current_epoch + 1) % self.args.conform_eval_epoch == 0 and self.args.mode == 'train'
             with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
-                loss, lm_loss, diff_loss = self.forward(data_batch, selfies_batch)
+                loss, lm_loss, diff_loss, MAE_loss = self.forward(data_batch, selfies_batch, data_batch.context)
             self.log('val_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
             self.log('val_diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
             self.log('val_loss', loss, sync_dist=True, batch_size=batch_size)
@@ -441,7 +502,7 @@ class DiffussionPL(L.LightningModule):
             if not train_epoch_condition and not eval_condition:
                 return
             with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
-                data_batch, sampled_positions = self.sample(data_batch, selfies_batch, self.infer_time)
+                data_batch, sampled_positions, MAE_loss = self.sample(data_batch, selfies_batch)
             sampled_positions = sampled_positions.float().cpu().numpy()
             node_index = 0
             for i in range(len(data_batch.rdmol)):
@@ -543,7 +604,7 @@ class DiffussionPL(L.LightningModule):
         self.log('valid/cov_median', cov_median, sync_dist=True, batch_size=len(rdmol_list))
         self.log('valid/mat_median', mat_median, sync_dist=True, batch_size=len(rdmol_list))
 
-        eval_results_3d_unimol = get_3D_edm_metric(predict_mol_list)
+        eval_results_3d_unimol, _ = get_3D_edm_metric(predict_mol_list)
         self.log('valid/MolStable_3D', eval_results_3d_unimol['mol_stable'], sync_dist=True, batch_size=len(rdmol_list))
         self.log('valid/AtomStable_3D', eval_results_3d_unimol['atom_stable'], sync_dist=True, batch_size=len(rdmol_list))
         self.log('valid/Validity_3D', eval_results_3d_unimol['Validity'], sync_dist=True, batch_size=len(rdmol_list))
@@ -553,19 +614,42 @@ class DiffussionPL(L.LightningModule):
 
 
     @torch.compile(dynamic=True, disable=disable_compile)
-    def forward_llm(self, data_batch, selfies_batch):
-        targets = selfies_batch.input_ids.masked_fill(~selfies_batch.attention_mask.bool(), -100)
-        outputs = self.llm_model(input_ids=selfies_batch.input_ids,
-                                 attention_mask=selfies_batch.attention_mask,
-                                 return_dict=True,
-                                 labels=targets,
-                                 output_hidden_states=True)
+    def forward_llm(self, data_batch, selfies_batch, context=None):
+        if context is not None:
+            token_embeds = self.llm_model.get_input_embeddings()(selfies_batch.input_ids)
+            condition_embeds = self.create_condition_prompt(context)
+            inputs_embeds = torch.cat([condition_embeds, token_embeds], dim=1)
+
+            soft_prompt_attention = torch.ones((selfies_batch.attention_mask.shape[0], 4),
+                                            device=selfies_batch.attention_mask.device)
+            attention_mask = torch.cat([soft_prompt_attention, selfies_batch.attention_mask], dim=1)
+
+            ignore_prefix = torch.full((selfies_batch.input_ids.shape[0], 4), -100,
+                                    device=selfies_batch.input_ids.device)
+            target = torch.cat([ignore_prefix, selfies_batch.input_ids], dim=1)
+            target = target.masked_fill(~attention_mask.bool(), -100)
+
+            outputs = self.llm_model(inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                return_dict=True,
+                labels=target,
+                output_hidden_states=True)
+
+            outputs_hidden_states = [h[:, 4:] for h in outputs.hidden_states]
+        else:
+            targets = selfies_batch.input_ids.masked_fill(~selfies_batch.attention_mask.bool(), -100)
+            outputs = self.llm_model(input_ids=selfies_batch.input_ids,
+                                    attention_mask=selfies_batch.attention_mask,
+                                    return_dict=True,
+                                    labels=targets,
+                                    output_hidden_states=True)
+            outputs_hidden_states = outputs.hidden_states
 
         if self.llm_tune == 'freeze':
-            hidden_states = tuple(h.detach() for h in outputs.hidden_states)
+            hidden_states = tuple(h.detach() for h in outputs_hidden_states)
             lm_loss = 0
         else:
-            hidden_states = outputs.hidden_states
+            hidden_states = outputs_hidden_states
             lm_loss = outputs.loss
 
         if self.use_llm_projector:
@@ -589,38 +673,30 @@ class DiffussionPL(L.LightningModule):
             lm_x = lm_x / norm # shape = [batch_size, rdmol_len, hidden_size]
             return lm_x, lm_loss
 
-    def forward(self, data_batch, selfies_batch):
+    def forward(self, data_batch, selfies_batch, context=None):
         lm_loss = 0
         lm_x = None
         if self.use_llm:
-            lm_x, lm_loss = self.forward_llm(data_batch, selfies_batch)
+            lm_x, lm_loss = self.forward_llm(data_batch, selfies_batch, context)
 
         bs = len(data_batch['smiles'])
         max_num_nodes = data_batch.max_seqlen
         total_num_nodes = data_batch.x.shape[0]
-        if False:
-            pos_t_batch, batch_mask = to_dense_batch(data_batch.pos, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)
-            pos_0_batch, _ = to_dense_batch(data_batch.gt_pos, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)
-            pred_pos, pred_noise = self.diffusion_model(data_batch, lm_x)
-            if self.pred_noise:
-                pred_batch = to_dense_batch(pred_pos, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)[0] if self.align_prediction else None
-                pred_noise_batch, _ = to_dense_batch(pred_noise, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)
-                gt_noise_batch, _ = to_dense_batch(data_batch.noise, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)
-                diff_loss = self.get_noise_loss(pred_noise_batch, gt_noise_batch, pos_0_batch, pos_t_batch, pred_batch, data_batch.alpha_t_batch, data_batch.sigma_t_batch, total_num_nodes, batch_mask, self.reduce_node_mean, self.align_loss, self.translation_correction, self.align_prediction)
-            else:
-                pred_pos_batch, _ = to_dense_batch(pred_pos, data_batch.batch, batch_size=bs)
-                diff_loss = self.get_pos_loss(pred_pos_batch, pos_0_batch, pos_t_batch, total_num_nodes, data_batch.loss_norm, batch_mask, self.reduce_node_mean, self.align_loss)
+        if context is not None:
+            pred_pos, pred_noise, classifier_args = self.diffusion_model(data_batch, lm_x, context)
+            MAE_loss = None # NOT CHECK THE MAE in training
         else:
             pred_pos, pred_noise = self.diffusion_model(data_batch, lm_x)
-            if self.pred_noise:
-                pred_batch = to_dense_batch(pred_pos, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)[0] if self.align_prediction else None
-                (pos_t_batch, pos_0_batch, pred_noise_batch, gt_noise_batch), batch_mask = to_dense_batch_list_tensor([data_batch.pos, data_batch.gt_pos, pred_noise, data_batch.noise], data_batch.batch, bs, max_num_nodes)
-                diff_loss = self.get_noise_loss(pred_noise_batch, gt_noise_batch, pos_0_batch, pos_t_batch, pred_batch, data_batch.alpha_t_batch, data_batch.sigma_t_batch, total_num_nodes, batch_mask, self.reduce_node_mean, self.align_loss, self.translation_correction, self.align_prediction)
-            else:
-                pos_t_batch, batch_mask = to_dense_batch(data_batch.pos, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)
-                pos_0_batch, _ = to_dense_batch(data_batch.gt_pos, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)
-                pred_pos_batch, _ = to_dense_batch(pred_pos, data_batch.batch, batch_size=bs)
-                diff_loss = self.get_pos_loss(pred_pos_batch, pos_0_batch, pos_t_batch, total_num_nodes, data_batch.loss_norm, batch_mask, self.reduce_node_mean, self.align_loss)
+            MAE_loss = None
+        if self.pred_noise:
+            pred_batch = to_dense_batch(pred_pos, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)[0] if self.align_prediction else None
+            (pos_t_batch, pos_0_batch, pred_noise_batch, gt_noise_batch), batch_mask = to_dense_batch_list_tensor([data_batch.pos, data_batch.gt_pos, pred_noise, data_batch.noise], data_batch.batch, bs, max_num_nodes)
+            diff_loss = self.get_noise_loss(pred_noise_batch, gt_noise_batch, pos_0_batch, pos_t_batch, pred_batch, data_batch.alpha_t_batch, data_batch.sigma_t_batch, total_num_nodes, batch_mask, self.reduce_node_mean, self.align_loss, self.translation_correction, self.align_prediction)
+        else:
+            pos_t_batch, batch_mask = to_dense_batch(data_batch.pos, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)
+            pos_0_batch, _ = to_dense_batch(data_batch.gt_pos, data_batch.batch, batch_size=bs, max_num_nodes=max_num_nodes)
+            pred_pos_batch, _ = to_dense_batch(pred_pos, data_batch.batch, batch_size=bs)
+            diff_loss = self.get_pos_loss(pred_pos_batch, pos_0_batch, pos_t_batch, total_num_nodes, data_batch.loss_norm, batch_mask, self.reduce_node_mean, self.align_loss)
 
         loss = 0
         if self.args.lm_loss > 0:
@@ -642,7 +718,9 @@ class DiffussionPL(L.LightningModule):
 
         lm_x = None
         if self.use_llm:
-            lm_x, _ = self.forward_llm(data_batch, selfies_batch)
+            lm_x, _ = self.forward_llm(data_batch, selfies_batch, data_batch.context)
+
+        classifier_args = None
 
         for i in range(len(t_array)):
             t = t_array[i]
@@ -666,7 +744,11 @@ class DiffussionPL(L.LightningModule):
 
             data_batch['alpha_t'] = torch.ones((num_nodes, 1), device=device) * alpha_t
             data_batch['sigma_t'] = torch.ones((num_nodes, 1), device=device) * sigma_t
-            pred_pos, _ = self.diffusion_model(data_batch, lm_x)
+
+            if hasattr(data_batch, "context"):
+                pred_pos, _, classifier_args = self.diffusion_model(data_batch, lm_x, data_batch.context)
+            else:
+                pred_pos, _ = self.diffusion_model(data_batch, lm_x)
 
             pos_mean = (alpha_t_given_s * sigma_s ** 2 / sigma_t ** 2) * data_batch.pos + (alpha_s * sigma2_t_given_s / sigma_t ** 2) * pred_pos
             pos_mean = remove_mean(pos_mean, data_batch.batch, bs=bs)
@@ -681,7 +763,21 @@ class DiffussionPL(L.LightningModule):
 
         pos = pos_mean * self.pos_std # std of qm9's dataset
         data_batch['pos'] = pos
-        return data_batch, pos
+
+        if hasattr(data_batch, "context"):
+            assert classifier_args is not None
+            h0, _, full_edges, _, node_mask, edge_mask, n_nodes = classifier_args
+            full_pos, _ = to_dense_batch(data_batch.pos, data_batch.batch)  # [B, N, 3]
+            full_pos = full_pos.reshape(-1, 3) # [B * N, 3]
+            context_prediction = self.property_prediction_model(h0, full_pos, full_edges, None, node_mask, edge_mask, n_nodes) # Predict context using the classifier
+            context_prediction = context_prediction * self.condition_property_mad + self.condition_property_mean  # Rescale the predictions
+            context_target = data_batch.context.clone()
+            context_target = context_target * self.condition_property_mad + self.condition_property_mean
+            MAE_loss = torch.functional.F.l1_loss(context_prediction, context_target, reduction='none')
+        else:
+            MAE_loss = None
+
+        return data_batch, pos, MAE_loss
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -719,6 +815,8 @@ class DiffussionPL(L.LightningModule):
         parser.add_argument('--init_checkpoint', type=str, default=None)
         parser.add_argument('--ckpt_path', type=str, default=None)
 
+        parser.add_argument('--eval_smiles_path', type=str, default=None)
+
         ## loss
         parser.add_argument('--lm_loss', type=float, default=0)
         parser.add_argument('--diff_loss', type=float, default=1.0)
@@ -737,6 +835,8 @@ class DiffussionPL(L.LightningModule):
         parser.add_argument('--use_self_att_proj', action='store_true', default=False)
         parser.add_argument('--diff_tune', type=str, default="full")
         parser.add_argument('--diff_ckpt', type=str, default=None)
+
+        parser.add_argument('--llm_ckpt', type=str, default=None)
         DGTDiffusion.add_args(parser)
         return parent_parser
 

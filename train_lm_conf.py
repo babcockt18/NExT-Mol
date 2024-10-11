@@ -7,6 +7,7 @@ import lightning.pytorch.callbacks as plc
 from lightning.pytorch.loggers import CSVLogger
 from model.diffusion_pl import DiffussionPL
 from data_provider.diffusion_data_module import QM9TorDFDataModule, GeomDrugsTorDFDataModule
+from data_provider.diffusion_data_module_v2 import QM9DataModule
 import os
 from rdkit import RDLogger
 from model.ema import EMACallBack
@@ -45,8 +46,11 @@ def main(args):
     print('before inserting total tokens:', len(tokenizer))
 
     if args.dataset == 'QM9-df':
-        use_distributed_sampler = True
-        dm = QM9TorDFDataModule(args.root, args.num_workers, args.batch_size, tokenizer, args.load_test_only, args)
+        if args.condition_property is None:
+            use_distributed_sampler = True
+            dm = QM9TorDFDataModule(args.root, args.num_workers, args.batch_size, tokenizer, args.load_test_only, args)
+        else:
+            dm = QM9DataModule(args.root, args.num_workers, args.batch_size, tokenizer, args)
     elif args.dataset == 'Geom-drugs-df':
         use_distributed_sampler = False
         dm = GeomDrugsTorDFDataModule(args.root, args.num_workers, args.batch_size, tokenizer, args.load_test_only, args)
@@ -62,11 +66,11 @@ def main(args):
         else:
             state_dict = ckpt['state_dict']
 
-        model = DiffussionPL(args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens, noise_scheduler=dm.noise_scheduler, pos_std=dm.pos_std)
+        model = DiffussionPL(args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens, noise_scheduler=dm.noise_scheduler, pos_std=dm.pos_std, property_normalizations=dm.prop_norms, property_distribution=dm.prop_dist)
         model.load_state_dict(state_dict, strict=True)
         print(f"Loading {'EMA ' if args.use_ema else ''}model from {args.init_checkpoint}")
     else:
-        model = DiffussionPL(args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens, noise_scheduler=dm.noise_scheduler, pos_std=dm.pos_std)
+        model = DiffussionPL(args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens, noise_scheduler=dm.noise_scheduler, pos_std=dm.pos_std, property_normalizations=dm.prop_norms, property_distribution=dm.prop_dist)
     model.train()
 
     print('total params:', sum(p.numel() for p in model.parameters()))
@@ -129,7 +133,10 @@ def main(args):
 
         del dm # release memory and reinitialize datamodule
         if args.dataset == 'QM9-df':
-            dm = QM9TorDFDataModule(args.root, args.num_workers, args.batch_size, tokenizer, False, args)
+            if args.condition_property is None:
+                dm = QM9TorDFDataModule(args.root, args.num_workers, args.batch_size, tokenizer, False, args)
+            else:
+                dm = QM9DataModule(args.root, args.num_workers, args.batch_size, tokenizer, args)
         elif args.dataset == 'Geom-drugs-df':
             dm = GeomDrugsTorDFDataModule(args.root, args.num_workers, args.batch_size, tokenizer, False, args)
         else:
@@ -211,6 +218,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_ema', action='store_true', default=False)
     parser.add_argument('--use_flash_attention', action='store_true', default=False)
     parser = QM9TorDFDataModule.add_model_specific_args(parser)
+    parser.add_argument('--condition_property', type=str, default=None)
     args = parser.parse_args()
 
     print("=========================================")

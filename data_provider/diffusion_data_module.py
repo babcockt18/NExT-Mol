@@ -49,7 +49,7 @@ class QM9Collater(object):
 
     def add_noise(self, data):
         t_eps = 1e-5
-        
+
         bs = len(data['ptr']) - 1
         t = (torch.rand(1) + torch.linspace(0, 1, bs)) % 1
         data['t'] = t * (1. - t_eps) + t_eps ## time
@@ -67,7 +67,7 @@ class QM9Collater(object):
             rot_aug = Rotation.random(bs)
             rot_aug = rot_aug[data.batch.numpy()]
             data['pos'] = torch.from_numpy(rot_aug.apply(data['pos'].numpy())).to(dtype)
-        
+
         if self.aug_translation:
             trans_aug = 0.01 * torch.randn(bs, 3, dtype=dtype)
             data['pos'] = data['pos'] + trans_aug[data.batch]
@@ -103,7 +103,7 @@ class QM9Collater(object):
         rdmol2selfies = [data.pop('rdmol2selfies') for data in data_list]
         rdmol2selfies_mask = [data.pop('rdmol2selfies_mask') for data in data_list]
         [data.pop('passed_conf_matching', None) for data in data_list]
-        
+
         ## graph batch
         data_batch = Batch.from_data_list(data_list)
         data_batch['max_seqlen'] = int((data_batch['ptr'][1:] - data_batch['ptr'][:-1]).max())
@@ -153,7 +153,7 @@ class QM9InferCollater(object):
         rdmol2selfies = [data.pop('rdmol2selfies') for data in data_list]
         rdmol2selfies_mask = [data.pop('rdmol2selfies_mask') for data in data_list]
         [data.pop('passed_conf_matching', None) for data in data_list]
-        
+
         ## graph batch
         data_batch = Batch.from_data_list(data_list)
         data_batch['max_seqlen'] = int((data_batch['ptr'][1:] - data_batch['ptr'][:-1]).max())
@@ -163,7 +163,7 @@ class QM9InferCollater(object):
             data_batch['pos'] = torch.randn(shape)
         else:
             data_batch['pos'] = sample_com_rand_pos(shape, data_batch.batch)
-        
+
         ## construct mapping from rdmol to selfies
         sf_max_len = selfie_batch.input_ids.shape[1]
         atom_max_len = int((data_batch['ptr'][1:] - data_batch['ptr'][:-1]).max())
@@ -215,7 +215,12 @@ class QM9TorDFDataModule(L.LightningDataModule):
         rand_smiles = args.rand_smiles
         addHs = args.addHs
         infer_noise = args.infer_noise
-        
+
+        self.prop_norms = None
+        self.prop_dist = None
+        self.nodes_dist = None
+
+
         if self.use_eigvec:
             if not load_test_only:
                 self.train_dataset = QM9TorDF(f'{root}/processed_train_eig.pt', selfies_tokenizer, rand_smiles, addHs, f'{root}/tordf.train', self.transform, 'train', flatten_dataset=self.flatten_dataset)
@@ -348,7 +353,7 @@ class CustomDistributedSampler(Sampler):
     def __iter__(self):
         assert self.shuffle
         assert self.drop_last
-    
+
         # deterministically shuffle based on epoch and seed
         valid_ids = [i for i, data in enumerate(self.dataset._data_list) if data is not None]
         random.Random(self.seed + self.epoch).shuffle(valid_ids)
@@ -386,7 +391,7 @@ class GeomDrugsTorDFDataModule(L.LightningDataModule):
         self.args = args
         self.root = root
         self.discrete_schedule = args.discrete_schedule
-        
+
         self.num_workers = num_workers
         self.batch_size = batch_size
         self.selfies_tokenizer = selfies_tokenizer
@@ -409,7 +414,7 @@ class GeomDrugsTorDFDataModule(L.LightningDataModule):
             self.global_rank = 0
         else:
             raise ValueError('Please specify world size')
-        
+
         print('world size', self.world_size, 'global rank', self.global_rank)
         # if not args.mode in {'eval', 'eval_gen', 'eval_conf', 'eval_test_conform'}:
         if not load_test_only:
@@ -425,7 +430,7 @@ class GeomDrugsTorDFDataModule(L.LightningDataModule):
         self.disable_com = args.disable_com
         self.aug_translation = args.aug_translation
         self.pos_std = self.test_dataset.pos_std
-        
+
         self.max_atoms = 178
         self.max_sf_tokens = 190
 

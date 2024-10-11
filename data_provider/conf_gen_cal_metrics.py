@@ -472,7 +472,7 @@ def set_rdmol_positions(rdkit_mol, pos, removeHs=True, add_conformer=False):
             conf.SetAtomPosition(i, pos[i].tolist())
         rdkit_mol.AddConformer(conf, assignId=True)
     else:
-        assert rdkit_mol.GetConformer(0).GetPositions().shape[0] == pos.shape[0], print(rdkit_mol.GetConformer(0).GetPositions().shape, pos.shape)
+        assert rdkit_mol.GetConformer(0).GetPositions().shape[0] == pos.shape[0], (rdkit_mol.GetConformer(0).GetPositions().shape, pos.shape)
         for i in range(pos.shape[0]):
             rdkit_mol.GetConformer(0).SetAtomPosition(i, pos[i].tolist())
     return rdkit_mol
