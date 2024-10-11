@@ -33,7 +33,7 @@ def eval_(args, path, mode):
         smiles = load_smiles(path)
         mols = [Chem.MolFromSmiles(smi) for smi in smiles]
         edm2d_dout = get_2D_edm_metric(mols, dm.train_rdmols)
-        
+
         properties = ['atom_stable', 'mol_stable', 'Complete', 'Unique', 'Novelty']
         print(properties)
         print('\t'.join([str(edm2d_dout[prop]) for prop in properties]))
@@ -58,8 +58,8 @@ def eval_(args, path, mode):
             dataset_name = 'GeomDrugs'
         else:
             raise NotImplementedError(f"dataset {args.dataset} not implemented")
-        
-        
+
+
         if False:
             ## temporary fix on 3d coordinates
             for mol in tqdm(mols):
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--path', type=str, help='Path to the file', default=None)
     parser.add_argument('--mode', type=str, help='Mode for evaluation', default='smiles')
-    parser.add_argument('--llm_model', type=str, help='Path to the llm model', default='acharkq/MoLlama')
+    parser.add_argument('--llm_model', type=str, help='Path to the llm model', default='all_checkpoints/mollama')
     # parser.add_argument('--root', type=str, help='Path to the llm model', default=None)
     parser.add_argument('--dataset', type=str, help='Path to the llm model', default='GeomDrugs-JODO')
     QM9DM.add_model_specific_args(parser)

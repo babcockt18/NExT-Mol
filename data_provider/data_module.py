@@ -1208,7 +1208,7 @@ if __name__ == '__main__':
     from transformers import AutoTokenizer
     from utils_v2 import set_seed
     set_seed(0)
-    tokenizer = AutoTokenizer.from_pretrained('acharkq/MoLlama')
+    tokenizer = AutoTokenizer.from_pretrained('all_checkpoints/mollama')
     # print(tokenizer.unk_token_id, tokenizer.unk_token)
     dataset = QM9Dataset(root='./data/qm9v6', selfies_tokenizer=tokenizer)
     for i in range(len(dataset)):

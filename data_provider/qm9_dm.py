@@ -48,15 +48,15 @@ class D3Collater:
     def __init__(self, pad_idx, pad_to_multiple=8):
         self.pad_idx = pad_idx
         self.pad_to_multiple = pad_to_multiple
-    
+
     def __call__(self, atom_vec, edge_type, bond_type, coordinates, dist, tgt_coordinates=None, tgt_dist=None):
         padded_atom_vec = data_utils.collate_tokens(atom_vec, self.pad_idx, left_pad=False, pad_to_multiple=self.pad_to_multiple) # shape = [batch_size, max_atoms]
         padded_edge_type = data_utils.collate_tokens_2d(edge_type, 0, left_pad=False, pad_to_multiple=self.pad_to_multiple) # shape = [batch_size, max_atoms, max_atoms]
         padded_bond_type = data_utils.collate_tokens_2d(bond_type, 0, left_pad=False, pad_to_multiple=self.pad_to_multiple) # shape = [batch_size, max_atoms, max_atoms]
-        
+
         padded_coordinates = collate_tokens_coords(coordinates, 0, left_pad=False, pad_to_multiple=self.pad_to_multiple) # shape = [batch_size, max_atoms, 3]
         padded_dist = data_utils.collate_tokens_2d(dist, 0, left_pad=False, pad_to_multiple=self.pad_to_multiple) # shape = [batch_size, max_atoms, max_atoms]
-        
+
         if tgt_coordinates is None or tgt_dist is None:
             return padded_atom_vec, padded_edge_type, padded_bond_type, padded_coordinates, padded_dist
         else:
@@ -71,7 +71,7 @@ class InferenceCollater(object):
         self.tokenizer = tokenizer
         self.max_atoms = max_atoms
         self.max_sf_tokens = max_sf_tokens
-    
+
     def __call__(self, data_list):
         '''
         data_list: a list of data
@@ -88,7 +88,7 @@ class InferenceCollater(object):
         rdmol2selfies_mask = [data['rdmol2selfies_mask'] for data in data_list]
 
         padded_atom_vec, padded_edge_type, padded_bond_type, padded_coordinates, padded_dist = self.d3_collater(atom_vec, edge_type, bond_type, coordinates, dist)
-        
+
         self.tokenizer.padding_side = 'right'
         selfie_batch = self.tokenizer(selfies, padding='max_length', return_tensors='pt', max_length=self.max_sf_tokens, truncation=True, add_special_tokens=True)
 
@@ -112,7 +112,7 @@ class InferenceCollater(object):
 
         batch_size, d_atom = padded_atom_vec.shape[:2]
         d_selfies = selfie_batch.input_ids.shape[1]
-        
+
         padded_rdmol2selfies_mask = rdmol2selfies_mask[0].new_zeros((batch_size, d_atom))
         padded_rdmol2selfies = rdmol2selfies[0].new_zeros((batch_size, d_atom, d_selfies))
         for i in range(batch_size):
@@ -131,7 +131,7 @@ class TrainCollater(object):
         self.tokenizer = tokenizer
         self.max_atoms = max_atoms
         self.max_sf_tokens = max_sf_tokens
-    
+
     def __call__(self, data_list):
         '''
         data_list: a list of data
@@ -153,7 +153,7 @@ class TrainCollater(object):
         rdmol2selfies_mask = [data['rdmol2selfies_mask'] for data in data_list]
 
         padded_atom_vec, padded_edge_type, padded_bond_type, padded_coordinates, padded_dist, padded_tgt_coordinates, padded_tgt_dist = self.d3_collater(atom_vec, edge_type, bond_type, coordinates, dist, tgt_coordinates, tgt_dist)
-        
+
         self.tokenizer.padding_side = 'right'
         selfie_batch = self.tokenizer(selfies, padding='max_length', return_tensors='pt', max_length=self.max_sf_tokens, truncation=True, add_special_tokens=True)
 
@@ -169,7 +169,7 @@ class TrainCollater(object):
 
         batch_size, d_atom = padded_atom_vec.shape[:2]
         d_selfies = selfie_batch.input_ids.shape[1]
-        
+
         padded_rdmol2selfies_mask = rdmol2selfies_mask[0].new_zeros((batch_size, d_atom))
         padded_rdmol2selfies = rdmol2selfies[0].new_zeros((batch_size, d_atom, d_selfies))
         for i in range(batch_size):
@@ -220,7 +220,7 @@ class QM9UniMolVersion(Dataset):
 
     def __len__(self):
         return len(self.dataset)
-    
+
     def __getitem__(self, idx):
         ## transform the data into uni-mol version
         # data = Data(atom_type=x, pos=pos, charge=torch.tensor(charges), fc=torch.tensor(formal_charges),
@@ -236,14 +236,14 @@ class QM9UniMolVersion(Dataset):
         atoms = [self.id2type[xx] for xx in atom_type]
         atoms = np.array(atoms)
         tgt_coordinates = data['pos'].numpy() # shape = [N, 3]
-        
+
         ## sample a rdkit conformer
         rdkit_coords_cluster_list = data['rdkit_cluster_coords_list'][:self.topN] # only use top N conformers for sampling
         rmsd_score = np.asarray([item[1] for item in rdkit_coords_cluster_list])
         rmsd_score = normalize_rmsd_score(rmsd_score, self.beta, self.smooth)
         idx = np.random.choice(rmsd_score.shape[0], 1, replace=False, p=rmsd_score)[0]
         coordinates = rdkit_coords_cluster_list[idx][0]
-        
+
         # data.rdmol = set_rdmol_positions(data.rdmol, tgt_coordinates, removeHs=False, add_conformer=True)
         data.rdmol = set_rdmol_positions(data.rdmol, coordinates, removeHs=False, add_conformer=True)
 
@@ -272,13 +272,13 @@ class QM9UniMolVersion(Dataset):
             atoms = atoms[index]
             coordinates = coordinates[index]
             tgt_coordinates = tgt_coordinates[index]
-        
+
         atom_vec = torch.from_numpy(self.dictionary.vec_index(atoms)).long()
-        
+
         if self.normalize_coords:
             coordinates = coordinates - coordinates.mean(axis=0)
             tgt_coordinates = tgt_coordinates - tgt_coordinates.mean(axis=0)
-        
+
         if self.add_special_token:
             atom_vec = torch.cat([torch.LongTensor([self.bos]), atom_vec, torch.LongTensor([self.eos])])
             coordinates = np.concatenate([np.zeros((1, 3)), coordinates, np.zeros((1, 3))], axis=0)
@@ -306,14 +306,14 @@ class QM9UniMolVersion(Dataset):
         atoms = [self.id2type[xx] for xx in atom_type]
         atoms = np.array(atoms)
         tgt_coordinates = data['pos'].numpy() # shape = [N, 3]
-        
+
         ## pad the rdkit coords to the same length
         rdkit_coords_cluster_list = data['rdkit_cluster_coords_list'][:self.topN] # only use top N conformers for sampling
         coordinates_list = [item[0] for item in rdkit_coords_cluster_list]
         if len(coordinates_list) < self.topN:
             diff = self.topN - len(coordinates_list)
             coordinates_list.extend([coordinates_list[-1]] * diff)
-        
+
         data_list = []
         for coordinates in coordinates_list:
             _tgt_coordinates = tgt_coordinates.copy()
@@ -344,13 +344,13 @@ class QM9UniMolVersion(Dataset):
                 atoms = atoms[index]
                 coordinates = coordinates[index]
                 _tgt_coordinates = _tgt_coordinates[index]
-            
+
             atom_vec = torch.from_numpy(self.dictionary.vec_index(atoms)).long()
-            
+
             if self.normalize_coords:
                 coordinates = coordinates - coordinates.mean(axis=0)
                 _tgt_coordinates = _tgt_coordinates - _tgt_coordinates.mean(axis=0)
-            
+
             if self.add_special_token:
                 atom_vec = torch.cat([torch.LongTensor([self.bos]), atom_vec, torch.LongTensor([self.eos])])
                 coordinates = np.concatenate([np.zeros((1, 3)), coordinates, np.zeros((1, 3))], axis=0)
@@ -369,7 +369,7 @@ class QM9UniMolVersion(Dataset):
             bond_type = sp_bond_type.to_dense()
 
             data_dict =  {'atom_vec': atom_vec, 'coordinates': coordinates, 'dist': dist, 'tgt_coordinates': _tgt_coordinates, 'tgt_dist': tgt_dist, 'edge_type': edge_type, 'idx': data.idx, 'selfies': data.selfies, 'rdmol2selfies': data.rdmol2selfies, 'rdmol2selfies_mask': data.rdmol2selfies_mask, 'smiles': data.cano_smiles_woh, 'rdmol': rdmol, 'bond_type': bond_type}
-      
+
             data_list.append(data_dict)
         return data_list
 
@@ -402,7 +402,7 @@ def process_smiles2rdmol(smiles):
     perm = (edge_index[0] * N + edge_index[1]).argsort()
     edge_index = edge_index[:, perm]
     edge_type = edge_type[perm]
-    
+
 
     data = Data(selfies=selfies, edge_index=edge_index, edge_type=edge_type, rdmol2smiles=rdmol2smiles, rdkit_cluster_coords=rdkit_cluster_coords, cano_smiles_woh=cano_smiles_woh, rdmol=rdmol)
 
@@ -428,7 +428,7 @@ class UnCondPredictDataset(Dataset):
     def __init__(self, smiles_list, max_atoms):
         ## this is the mapping of atom types in qm9
         self.smiles_list = smiles_list
-        
+
         dict_path = Path(os.path.realpath(__file__)).parent / 'unimol_dict.txt'
         dictionary = Dictionary.load(str(dict_path))
         dictionary.add_symbol("[MASK]", is_special=True)
@@ -448,12 +448,12 @@ class UnCondPredictDataset(Dataset):
 
     def __len__(self):
         return len(self.smiles_list)
-    
+
     def __getitem__(self, idx):
         ## transform the data into uni-mol version
         smiles = self.smiles_list[idx]
         data = process_smiles2rdmol(smiles)
-        
+
         ## use the unimol model to refine the conformations
         atoms = [atom.GetSymbol() for atom in data.rdmol.GetAtoms()]
         atoms = np.asarray(atoms)
@@ -484,9 +484,9 @@ class UnCondPredictDataset(Dataset):
             index = np.random.permutation(len(atoms))[:self.max_atoms]
             atoms = atoms[index]
             coordinates = coordinates[index]
-        
+
         atom_vec = torch.from_numpy(self.dictionary.vec_index(atoms)).long()
-        
+
         if self.normalize_coords:
             coordinates = coordinates - coordinates.mean(axis=0)
 
@@ -528,7 +528,7 @@ class UnCondPredictDataset(Dataset):
 #         max_atoms = int(dataset._data.num_atom.max()) + 2 # +2 because of the bos and eos token;
 #         self.max_atoms = max_atoms
 #         print('QM9 max num atoms', max_atoms)
-        
+
 #         ## obtain max selfies token length
 #         selfies_list = dataset._data['selfies']
 #         selfies_lens = [len(list(sf.split_selfies(selfies))) for selfies in selfies_list]
@@ -539,10 +539,10 @@ class UnCondPredictDataset(Dataset):
 #         train_idx = splits['train']
 #         valid_idx = splits['valid']
 #         test_idx = splits['test']
-        
+
 #         ## filter the ones without selfies
 #         selfies = np.array(dataset._data.selfies)
-        
+
 #         print('before filtering', len(train_idx), len(valid_idx), len(test_idx))
 #         train_idx = train_idx[selfies[train_idx] != np.array('')]
 #         valid_idx = valid_idx[selfies[valid_idx] != np.array('')]
@@ -594,7 +594,7 @@ class UnCondPredictDataset(Dataset):
 
 #     def setup_predict_dataset(self, smiles_list):
 #         self.predict_dataset = UnCondPredictDataset(smiles_list, self.max_atoms + 10) # +10 to allow sampling larger molecules during inference
-    
+
 #     def predict_dataloader(self):
 #         assert self.predict_dataset is not None
 #         loader = DataLoader(
@@ -621,9 +621,9 @@ if __name__ == '__main__':
     from transformers import AutoTokenizer
     from utils_v2 import set_seed
     set_seed(0)
-    tokenizer = AutoTokenizer.from_pretrained('acharkq/MoLlama')
+    tokenizer = AutoTokenizer.from_pretrained('all_checkpoints/mollama')
     # print(tokenizer.unk_token_id, tokenizer.unk_token)
-    dataset = QM9Dataset(root='./data/qm9v6', selfies_tokenizer=tokenizer)    
+    dataset = QM9Dataset(root='./data/qm9v6', selfies_tokenizer=tokenizer)
     for i in range(len(dataset)):
         for coord in dataset[i].rdkit_cluster_coords_list:
             new_rdmol = set_rdmol_positions(dataset[i].rdmol, coord, False)
@@ -650,4 +650,4 @@ if __name__ == '__main__':
                         selfies_array = rdmol2selfies[i, j].nonzero()[0].tolist()
                         print(reverse_map[atom_index], [l_s[k] for k in selfies_array])
                         input()
-        
+

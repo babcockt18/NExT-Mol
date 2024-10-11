@@ -782,7 +782,7 @@ class DiffussionPL(L.LightningModule):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group()
-        parser.add_argument('--llm_model', type=str, default="acharkq/MoLlama")
+        parser.add_argument('--llm_model', type=str, default="all_checkpoints/mollama")
         parser.add_argument('--num_beams', type=int, default=1)
         parser.add_argument('--llm_tune', type=str, default='freeze')
         parser.add_argument('--use_llm', action='store_true', default=False)

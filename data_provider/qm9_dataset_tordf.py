@@ -76,7 +76,7 @@ class QM9TorDFInfer(Dataset):
             with open(raw_conf_file, 'rb') as f:
                 raw_conf = pickle.load(f)
             self.data, self.slices, self.seed_pos_list, self.gt_conf_list, self.num_failures = self.process_data(raw_smiles, raw_conf, processed_path)
-        
+
         assert len(self.seed_pos_list) == len(self.gt_conf_list)
         self.mol_len = len(self.seed_pos_list)
         for seed_pos in self.seed_pos_list:
@@ -117,12 +117,12 @@ class QM9TorDFInfer(Dataset):
         self.infer_time = infer_time
 
 
-    def process_data(self, raw_smiles, raw_conf, processed_path):    
+    def process_data(self, raw_smiles, raw_conf, processed_path):
         smiles_data = raw_smiles.values.tolist()
         data_list = []
         seed_pos_list = []
         gt_conf_list = []
-        
+
         print('Processing inference data')
         num_failures = 0
         for smi, num_conf, corrected_smi in tqdm(smiles_data):
@@ -134,7 +134,7 @@ class QM9TorDFInfer(Dataset):
             if not conformers:
                 num_failures += 1
                 continue
-            
+
             data['corrected_smiles'] = corrected_smi
             data['corrected_selfies'] = sf.encoder(corrected_smi)
             data['rdmol'] = mol
@@ -144,7 +144,7 @@ class QM9TorDFInfer(Dataset):
             seed_pos = [conf.pos for conf in conformers]
             seed_pos = [pos - pos.mean(dim=0, keepdim=True) for pos in seed_pos]
             seed_pos_list.append(seed_pos)
-            
+
             gt_confs = clean_confs(corrected_smi, raw_conf[smi])
             gt_conf_list.append(gt_confs)
 
@@ -184,7 +184,7 @@ class QM9TorDFInfer(Dataset):
         data['seed_pos_idx'] = idx
         data['mol_idx'] = mol_idx
         data['pos'] = seed_pos / self.pos_std
-        
+
         ## setup perturb seed
         ## fake randomness; this is to generate reproducible test results
         data['t'] = self.infer_time
@@ -229,7 +229,7 @@ class QM9TorDF(Dataset):
             with open(raw_path, 'rb') as f:
                 raw_data = pickle.load(f)
             self.data, self.slices, self.pos_list = self.process_data(raw_data, processed_path)
-        
+
         self.pos_std = 1.4182
         self.flatten_dataset = flatten_dataset
         if self.flatten_dataset:
@@ -322,7 +322,7 @@ class QM9TorDF(Dataset):
             data = self.get_idx_data(idx)
             assert isinstance(data['pos'], list)
             if self.mode == 'train':
-                ## true random 
+                ## true random
                 data['pos'] = random.choice(data['pos'])
             elif self.mode == 'valid':
                 ## fake random that does not change with time; this is to generate reproducible validation results
@@ -336,7 +336,7 @@ class QM9TorDF(Dataset):
         rdmol.RemoveAllConformers()
         data['rdmol'] = set_rdmol_positions(rdmol, data['pos'], removeHs=False, )
         assert data['rdmol'].GetNumConformers() == 1
-        
+
         data['pos'] /= self.pos_std
         if self.transform:
             data = self.transform(data)
@@ -364,7 +364,7 @@ class QM9TorDF(Dataset):
 
 if __name__ == '__main__':
     # from transformers import AutoTokenizer
-    # tokenizer = AutoTokenizer.from_pretrained('acharkq/MoLlama')
+    # tokenizer = AutoTokenizer.from_pretrained('all_checkpoints/mollama')
     # tokenizer.add_bos_token = True
     # tokenizer.add_eos_token = True
     # transform = TorsionNoiseTransform()
@@ -381,7 +381,7 @@ if __name__ == '__main__':
     # print(dataset[0].pos)
     # print(dataset[0].pos)
     # print(dataset[0].pos)
-    
+
 
     # dataset = QM9TorDF('data/torsion_data/tordf_qm9/processed_val.pt', None, 'restricted', False, 'data/torsion_data/tordf_qm9/tordf.val', transform=None)
     # dataset = QM9TorDF('data/torsion_data/tordf_qm9/processed_test.pt', None, 'restricted', False, 'data/torsion_data/tordf_qm9/tordf.test', transform=None)

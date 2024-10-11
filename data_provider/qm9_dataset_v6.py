@@ -740,7 +740,7 @@ if __name__ == '__main__':
         exit()
     from transformers import AutoTokenizer
     from data_provider.qm9_dataset_v5 import QM9Dataset as QM9DatasetV5
-    tokenizer = AutoTokenizer.from_pretrained('acharkq/MoLlama')
+    tokenizer = AutoTokenizer.from_pretrained('all_checkpoints/mollama')
 
     dataset = QM9Dataset(root='./data/qm9v7', selfies_tokenizer=tokenizer, rand_smiles='restricted')
 

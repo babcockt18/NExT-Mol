@@ -31,7 +31,7 @@ class MyGeomDrugDatasetJODO(Dataset):
         self.pos_std = 2.3860
         self.max_num_atoms = 181
         self.max_num_sf_tokens = 167
-    
+
     def __len__(self):
         if self._indices is not None:
             return len(self._indices)
@@ -39,7 +39,7 @@ class MyGeomDrugDatasetJODO(Dataset):
 
     def len(self):
         return self.__len__()
-    
+
     def get_real_len(self):
         if hasattr(self, 'length'):
             return self.length
@@ -48,7 +48,7 @@ class MyGeomDrugDatasetJODO(Dataset):
         for _, value in nested_iter(self.slices):
             return len(value) - 1
         return 0
-    
+
     def get_idx_data(self, idx: int):
         # TODO (matthias) Avoid unnecessary copy here.
         if not hasattr(self, '_data_list') or self._data_list is None:
@@ -66,7 +66,7 @@ class MyGeomDrugDatasetJODO(Dataset):
 
         self._data_list[idx] = data.clone()
         return data.clone()
-    
+
     def __getitem__(self, idx):
         ## obtain the data first
         idx = self.indices()[idx]
@@ -95,7 +95,7 @@ class MyGeomDrugDatasetJODO(Dataset):
         data['rdmol2selfies'] = rdmol2selfies
         data['rdmol2selfies_mask'] = rdmol2selfies_mask
         return data
-    
+
     def add_unseen_selfies_tokens(self, tokenizer):
         with open(osp.join(self.root, self.processed_file_names[1]), 'r') as f:
             unseen_tokens = f.read().splitlines()
@@ -103,7 +103,7 @@ class MyGeomDrugDatasetJODO(Dataset):
         for token in unseen_tokens:
             if token not in vocab:
                 tokenizer.add_tokens(token)
-    
+
     def get_idx_split(self):
         # load split idx for train, val, test
         split_path = osp.join(self.root, self.raw_file_names[1])
@@ -117,14 +117,14 @@ class MyGeomDrugDatasetJODO(Dataset):
     @property
     def processed_file_names(self):
         return ['processed_data.pt', 'unseen_sf_tokens.txt']
-    
+
     def my_process(self):
         try:
             from rdkit import Chem, RDLogger
             RDLogger.DisableLog('rdApp.*')
         except ImportError:
             raise ImportError("Please install 'rdkit' to alternatively process the raw data.")
-        
+
         geom_drugs_dataset = _GeomDrugDatasetJODO(self.root, self.raw_file_names[0])
         data_list = []
         for data in tqdm(geom_drugs_dataset.data):
@@ -214,7 +214,7 @@ if __name__ == '__main__':
     from transformers import AutoTokenizer
     root_path = 'data/archive/jodo_data/geom'
     dataset = MyGeomDrugDatasetJODO(root=root_path)
-    tokenizer = AutoTokenizer.from_pretrained('acharkq/MoLlama')
+    tokenizer = AutoTokenizer.from_pretrained('all_checkpoints/mollama')
     canonical_selfies = dataset.data.canonical_selfies
     vocab = tokenizer.get_vocab()
     unseen_selfies_tokens = set()

@@ -8,7 +8,7 @@ from model.diffusion_model_dgt import remove_mean
 from pathlib import Path
 from model.diffusion_pl import DiffussionPL, get_precision, disable_compile
 import torch.distributed as dist
-        
+
 
 class UncondGenPL(DiffussionPL):
     def on_validation_epoch_start(self):
@@ -69,7 +69,7 @@ class UncondGenPL(DiffussionPL):
 
                 test_rdmol_list = {idx: rdmol for data in gather_box for idx, smiles, rdmol in data}
                 test_rdmol_list = list(test_rdmol_list.values())
-                
+
                 if self.trainer.is_global_zero:
                     ## save_predictions
                     torch.save(test_rdmol_list, save_path)
@@ -80,7 +80,7 @@ class UncondGenPL(DiffussionPL):
                     print(sub_geometry_metric)
                     eval_results_moses =  self.trainer.datamodule.get_moses_metrics(reconstructed_3d_mols)
                     print(eval_results_moses)
-                    
+
                     self.log('MolStable_3D', eval_results_3d_unimol['mol_stable'], sync_dist=True)
                     self.log('AtomStable_3D', eval_results_3d_unimol['atom_stable'], sync_dist=True)
                     self.log('Validity_3D', eval_results_3d_unimol['Validity'], sync_dist=True)
@@ -90,7 +90,7 @@ class UncondGenPL(DiffussionPL):
                     self.log('bond_length_mean', sub_geometry_metric['bond_length_mean'], sync_dist=True)
                     self.log('bond_angle_mean', sub_geometry_metric['bond_angle_mean'], sync_dist=True)
                     self.log('dihedral_angle_mean', sub_geometry_metric['dihedral_angle_mean'], sync_dist=True)
-                    
+
                     self.log('fcd_3d', eval_results_moses['FCD'], sync_dist=True)
 
     @torch.no_grad()
@@ -150,7 +150,7 @@ class UncondGenPL(DiffussionPL):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group()
-        parser.add_argument('--llm_model', type=str, default="acharkq/MoLlama")
+        parser.add_argument('--llm_model', type=str, default="all_checkpoints/mollama")
         parser.add_argument('--num_beams', type=int, default=1)
         parser.add_argument('--llm_tune', type=str, default='freeze')
         parser.add_argument('--use_llm', action='store_true', default=False)
