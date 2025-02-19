@@ -268,12 +268,14 @@ python eval_confs.py --input all_checkpoints/eval_dmt_l_drugs/lightning_logs/ver
 
 ## Citation
 
+If you use our codes or checkpoints, please cite your paper:
+
 ```bib
 @inproceedings{liu2025nextmol,
-title={{NExT}-{Mol}: 3D Diffusion Meets 1D Language Modeling for 3D Molecule Generation},
-author={Zhiyuan Liu and Yanchen Luo and Han Huang and Enzhi Zhang and Sihang Li and Junfeng Fang and Yaorui Shi and Xiang Wang and Kenji Kawaguchi and Tat-Seng Chua},
-booktitle={The Thirteenth International Conference on Learning Representations},
-year={2025},
-url={https://openreview.net/forum?id=p66a00KLWN}
+    title={{NExT}-{Mol}: 3D Diffusion Meets 1D Language Modeling for 3D Molecule Generation},
+    author={Zhiyuan Liu and Yanchen Luo and Han Huang and Enzhi Zhang and Sihang Li and Junfeng Fang and Yaorui Shi and Xiang Wang and Kenji Kawaguchi and Tat-Seng Chua},
+    booktitle={The Thirteenth International Conference on Learning Representations},
+    year={2025},
+    url={https://openreview.net/forum?id=p66a00KLWN}
 }
 ```
