@@ -480,7 +480,7 @@ class QM9Dataset(QM9):
     def __getitem__(self, idx):
         data = self.get(self.indices()[idx])
         data = data if self.transform is None else self.transform(data)
-        
+
         rdmol2smiles, output_smiles = build_rdkit2rand_smiles_withoutH_mapping(data.rdmol, self.rand_smiles)
         rdmol2smiles = rdmol2smiles.tolist()
         smiles2selfies, selfies_tokens, selfies = get_smiles2selfies_mapping(output_smiles) # smiles2selfies is a dict
@@ -501,7 +501,7 @@ class QM9Dataset(QM9):
                 rdmol2selfies_mask[i] = True
         data['rdmol2selfies'] = rdmol2selfies
         data['rdmol2selfies_mask'] = rdmol2selfies_mask
-        
+
         return data
 
 
@@ -570,7 +570,7 @@ def unrestricted_random_smiles(smiles, addHs=False):
     mol = Chem.MolFromSmiles(smiles)
     if addHs:
         mol = Chem.AddHs(mol)
-    
+
     while True:
         try:
             rand_smiles = Chem.MolToSmiles(mol, canonical=False, doRandom=True, isomericSmiles=False)
@@ -633,7 +633,7 @@ def build_smiles2selfies_mapping(molecule):
 
 if __name__ == '__main__':
     from transformers import AutoTokenizer
-    tokenizer = AutoTokenizer.from_pretrained('/mnt/vepfs/fs_users/lisihang/.cache/huggingface/hub/models--acharkq--MoLlama/snapshots/e94dd9943e0620313b693d92149ed8bd7a70bb96')
+    tokenizer = AutoTokenizer.from_pretrained('all_checkpoints/mollama')
     dataset = QM9Dataset(root='./data/qm9v6', selfies_tokenizer=tokenizer, rand_smiles='restricted')
     # splits = dataset.get_idx_split()
     # idx = dataset._data.idx + 1

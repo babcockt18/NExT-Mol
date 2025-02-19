@@ -306,7 +306,7 @@ def unrestricted_random_smiles(smiles, addHs=False):
 if __name__ == '__main__':
     from transformers import AutoTokenizer
     root_path = "./data/drugs"
-    tokenizer = AutoTokenizer.from_pretrained('acharkq/MoLlama')
+    tokenizer = AutoTokenizer.from_pretrained('all_checkpoints/mollama')
     dataset = GeomDrugsDataset(root=root_path, selfies_tokenizer=tokenizer)
 
     split_idx = dataset.get_idx_split()

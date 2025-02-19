@@ -592,7 +592,7 @@ class Mol123DGenerate(L.LightningModule):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group()
-        parser.add_argument('--llm_model', type=str, default="acharkq/MoLlama")
+        parser.add_argument('--llm_model', type=str, default="all_checkpoints/mollama")
         parser.add_argument('--num_beams', type=int, default=1)
         # parser.add_argument('--do_sample', action='store_true', default=False)
         parser.add_argument('--llm_tune', type=str, default='freeze')
@@ -643,7 +643,7 @@ class Mol123DGenerate(L.LightningModule):
         # assert batch == None
         bos_token_id = self.tokenizer.bos_token_id
         eos_token_id = self.tokenizer.eos_token_id
-        
+
         input_ids = torch.LongTensor([[bos_token_id] for _ in range(batch_size)]).to(self.device)
         self.llm_model.set_mode('causal')
         outputs = self.llm_model.generate(

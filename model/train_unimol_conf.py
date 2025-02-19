@@ -105,7 +105,7 @@ class UniMolConfTrain(L.LightningModule):
         else:
             raise NotImplementedError()
         ckpt = torch.load(args.unimol_path, map_location=torch.device('cpu'))['model']
-        
+
         strict = True if args.unimol_version != 'v2' else False
         if str(args.unimol_path).find('qm9_220908') >= 0:
             unimol_model.load_state_dict(ckpt, strict=strict)
@@ -149,7 +149,7 @@ class UniMolConfTrain(L.LightningModule):
 
         ## init unimol
         self.unimol_conf, self.dictionary = self.init_conf_generator(args)
-        self.conf_loss = MyMolConfGLoss(self.dictionary)        
+        self.conf_loss = MyMolConfGLoss(self.dictionary)
         self.save_hyperparameters(args)
 
     def training_step(self, batch, batch_idx):
@@ -158,7 +158,7 @@ class UniMolConfTrain(L.LightningModule):
 
         rdmol_batch, selfies_batch = batch
         loss, distance_loss, coord_loss = self.forward(rdmol_batch)
-        
+
         batch_size = selfies_batch.input_ids.shape[0]
         self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], sync_dist=True, batch_size=batch_size)
         self.log('train_loss', loss, sync_dist=True, batch_size=batch_size)
@@ -177,7 +177,7 @@ class UniMolConfTrain(L.LightningModule):
         1) the lm_loss, distance_loss, coord_loss for each molecule
         2) the performance of conformation prediction.
         '''
-        
+
         rdmol_batch, selfies_batch = batch
 
         loss, distance_loss, coord_loss, coords_predict_list = self.forward(rdmol_batch, return_conformers=True)
@@ -187,7 +187,7 @@ class UniMolConfTrain(L.LightningModule):
         self.log('val_coord_loss', coord_loss, sync_dist=True, batch_size=batch_size)
 
         ## prepare data for evaluation of the conformation generation performance
-        rdmols = copy.deepcopy(rdmol_batch.rdmols) 
+        rdmols = copy.deepcopy(rdmol_batch.rdmols)
         for i in range(len(rdmols)):
             mol = rdmols[i]
             coords_predict = coords_predict_list[i]
@@ -212,7 +212,7 @@ class UniMolConfTrain(L.LightningModule):
             ## sanity check
             smiles_list = [Chem.MolToSmiles(mol) for mol in rdmol_list]
             assert len(set(smiles_list)) == 1
-            
+
             ## creat the gt_rdmol
             gt_rdmol = copy.deepcopy(rdmol_list[0])
             gt_rdmol.RemoveAllConformers()
@@ -229,7 +229,7 @@ class UniMolConfTrain(L.LightningModule):
                 rmsd_mat[0, i] = rmsd
                 conformer_ids = [conf.GetId() for conf in rdmol.GetConformers()]
                 predict_mol_list.append(rdmol)
-            
+
             rmsd_mat_min = rmsd_mat.min(axis=-1)
             cov = (rmsd_mat_min <= threshold).mean()
             mat = rmsd_mat_min.mean()
@@ -243,7 +243,7 @@ class UniMolConfTrain(L.LightningModule):
         self.log('mat_mean', mat_mean, sync_dist=True)
         self.log('cov_median', cov_median, sync_dist=True)
         self.log('mat_median', mat_median, sync_dist=True)
-        
+
         eval_results_3d_unimol = get_3D_edm_metric(predict_mol_list)
         self.log('MolStable_3D_unimol', eval_results_3d_unimol['mol_stable'], sync_dist=True)
         self.log('AtomStable_3D_unimol', eval_results_3d_unimol['atom_stable'], sync_dist=True)
@@ -261,10 +261,10 @@ class UniMolConfTrain(L.LightningModule):
             distance_predict, coords_predict = self.unimol_conf(rdmol_batch.atom_vec, rdmol_batch.dist, rdmol_batch.coordinates, rdmol_batch.edge_type, rdmol_batch.bond_type)
         distance_loss, coord_loss = self.conf_loss(rdmol_batch.atom_vec, distance_predict, coords_predict, rdmol_batch.tgt_dist, rdmol_batch.tgt_coordinates)
         loss = self.args.unimol_distance_loss * distance_loss + self.args.unimol_coord_loss * coord_loss
-        
+
         if not return_conformers:
             return loss, distance_loss, coord_loss
-        
+
         token_mask = self.conf_loss.get_token_mask(rdmol_batch.atom_vec)
         coords_predict_list = []
         for i in range(coords_predict.shape[0]):
@@ -280,7 +280,7 @@ class UniMolConfTrain(L.LightningModule):
             distance_predict, coords_predict = self.unimol_conf(rdmol_batch.atom_vec, rdmol_batch.dist, rdmol_batch.coordinates, rdmol_batch.edge_type)
         else:
             distance_predict, coords_predict = self.unimol_conf(rdmol_batch.atom_vec, rdmol_batch.dist, rdmol_batch.coordinates, rdmol_batch.edge_type, rdmol_batch.bond_type)
-            
+
         token_mask = self.conf_loss.get_token_mask(rdmol_batch.atom_vec)
         coords_predict_list = []
         for i in range(coords_predict.shape[0]):
@@ -293,7 +293,7 @@ class UniMolConfTrain(L.LightningModule):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = parent_parser.add_argument_group()
-        parser.add_argument('--llm_model', type=str, default="acharkq/MoLlama")
+        parser.add_argument('--llm_model', type=str, default="all_checkpoints/mollama")
         parser.add_argument('--num_beams', type=int, default=1)
         # parser.add_argument('--do_sample', action='store_true', default=False)
         parser.add_argument('--llm_tune', type=str, default='freeze')
@@ -301,7 +301,7 @@ class UniMolConfTrain(L.LightningModule):
         parser.add_argument('--sample_num', type=int, default=10000)
         parser.add_argument('--temperature', type=float, default=1.0)
         parser.add_argument('--generate_eval_epoch', type=int, default=10)
-        
+
 
         parser.add_argument('--unimol_version', type=str, default="v1")
         parser.add_argument('--unimol_path', type=str, default="unimol_ckpt/mol_pre_no_h_220816.pt")
@@ -320,11 +320,11 @@ class UniMolConfTrain(L.LightningModule):
         parser.add_argument('--warmup_lr', type=float, default=1e-6, help='optimizer warmup learning rate')
         parser.add_argument('--warmup_steps', type=int, default=1000, help='optimizer warmup steps')
         parser.add_argument('--lr_decay_rate', type=float, default=0.9, help='optimizer lr decay rate')
-        parser.add_argument('--scheduler', type=str, default='linear_warmup_cosine_lr', help='type of scheduler') # or 
+        parser.add_argument('--scheduler', type=str, default='linear_warmup_cosine_lr', help='type of scheduler') # or
 
         parser.add_argument('--optimizer', type=str, default='adamw', help='type of scheduler')
         parser.add_argument('--init_checkpoint', type=str, default='')
-        
+
 
         ## add unimol-conf config
         UnimolConfGModel.add_args(parser)

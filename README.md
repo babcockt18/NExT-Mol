@@ -71,7 +71,8 @@ python train_uncond_gene.py  \
     --check_val_every_n_epoch 20 \
     --accumulate_grad_batches 2 \
     --dropout 0.05 \
-    --test_conform_epoch 100000 --conform_eval_epoch 100000 \
+    --test_conform_epoch 100000 \
+    --conform_eval_epoch 100000 \
     --cache_epoch 2 \
     --generate_eval_epoch 100 \
     --eval_smiles_path path-to-smiles \
@@ -131,6 +132,61 @@ python train_uncond_gene.py  \
     --mode train 
 exit
 }
+```
+
+### Conditional 3D molecule generation
+
+**QM9-2014 dataset:**
+
+Step 1: train llm and generate 1D molecule sequences
+
+```bash
+{
+condition="mu"; # 'mu', 'alpha', 'homo', 'lumo', 'gap', 'Cv'
+python llm_train.py  \
+    --dataset "QM9" \
+    --root path-to-QM92014 \
+    --llm_tune full  \
+    --filename "qm9_llm_conditional_${condition}" \
+    --generate_eval_epoch 5 \
+    --llm_model "./all_checkpoints/mollama/" \
+    --rand_smiles restricted \
+    --temperature 1.0 \
+    --num_beams 5 \
+    --sample_num 10000 \
+    --batch_size 64 \
+    --accumulate_grad_batches 2 \
+    --max_epochs 100 \
+    --condition_property "${condition}";
+}
+```
+
+After training, find the generated smiles file in the log folder.
+
+Step 2: train diffusion model and generate 3D conformers (with 8 A100 GPUs)
+
+```bash
+python train_lm_conf.py \
+    --dataset "QM9-df" \
+    --root path-to-QM92014 \
+    --batch_size 512 \
+    --infer_batch_size 512 \
+    --num_workers 4 \
+    --save_every_n_epochs 50  \
+    --filename "conditional_eval_${condition}" \
+    --llm_model "./all_checkpoints/mollama/" \
+    --check_val_every_n_epoch 200 \
+    --conform_eval_epoch 100 \
+    --generate_eval_epoch 50  \
+    --dropout 0 \
+    --num_beams 5 \
+    --sampling_steps 100  \
+    --accumulate_grad_batches 2 \
+    --use_llm \
+    --llm_ckpt "all_checkpoints/qm9_llm_conditional_${condition}/epoch=99.ckpt" \
+    --eval_smiles_path path-to-smiles \
+    --mode train \
+    --condition_property "${condition}";
 ```
 
 ### 3D Conformer prediction

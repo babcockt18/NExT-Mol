@@ -36,14 +36,9 @@ def remove_mean_with_mask(x, node_mask, return_mean=False):
     return x
 
 
-def remove_mean(pos, batch, bs=None):
-    if True:
-        mean_pos = scatter(pos, batch, dim=0, reduce='mean') # shape = [B, 3]
-        pos = pos - mean_pos[batch]
-    else:
-        mean_pos = torch.empty((bs, pos.shape[1]), device=pos.device)
-        mean_pos.scatter_reduce_(0, batch.unsqueeze(1).expand(-1, pos.shape[1]), pos, reduce='mean', include_self=False)
-        pos = pos - mean_pos[batch]
+def remove_mean(pos, batch):
+    mean_pos = scatter(pos, batch, dim=0, reduce='mean') # shape = [B, 3]
+    pos = pos - mean_pos[batch]
     return pos
 
 
@@ -220,7 +215,7 @@ class TransLayerOptim(MessagePassing):
                 size_i: Optional[int]) -> Tuple[Tensor, Tensor]:
 
         edge_key, edge_value = torch.tanh(self.lin_edge(edge_attr)).view(-1, self.heads, 2, self.out_channels).unbind(dim=2)
-        
+
         alpha = (query_i * key_j * edge_key).sum(dim=-1) / math.sqrt(self.out_channels)
 
         alpha = softmax(alpha, index, ptr, size_i)
@@ -317,8 +312,8 @@ class EquivariantBlock(nn.Module):
                 self.edge_emb = nn.Linear(edge_dim, edge_dim)
             else:
                 self.edge_emb = nn.Sequential(
-                    nn.Linear(edge_dim, edge_dim * 2), 
-                    nn.GELU(), 
+                    nn.Linear(edge_dim, edge_dim * 2),
+                    nn.GELU(),
                     nn.Linear(edge_dim * 2, edge_dim),
                     nn.LayerNorm(edge_dim),
                 )
@@ -332,13 +327,13 @@ class EquivariantBlock(nn.Module):
         # Feed forward block -> node.
         self.ff_linear1 = nn.Linear(node_dim, node_dim * mlp_ratio)
         self.ff_linear2 = nn.Linear(node_dim * mlp_ratio, node_dim)
-        
+
         if pair_update:
             self.node2edge_lin = nn.Linear(node_dim, edge_dim)
-            # Feed forward block -> edge.
-            self.ff_linear3 = nn.Linear(edge_dim, edge_dim * mlp_ratio)
-            self.ff_linear4 = nn.Linear(edge_dim * mlp_ratio, edge_dim)
-        
+        # Feed forward block -> edge.
+        self.ff_linear3 = nn.Linear(edge_dim, edge_dim * mlp_ratio)
+        self.ff_linear4 = nn.Linear(edge_dim * mlp_ratio, edge_dim)
+
         # equivariant edge update layer
         self.equi_pos = equi_pos
         if self.equi_pos:
@@ -359,13 +354,13 @@ class EquivariantBlock(nn.Module):
                     nn.Linear(time_dim, edge_dim * 6)
                 )
                 self.norm1_edge = nn.LayerNorm(edge_dim, elementwise_affine=False, eps=1e-6)
-                self.norm2_edge = nn.LayerNorm(edge_dim, elementwise_affine=False, eps=1e-6)
+            self.norm2_edge = nn.LayerNorm(edge_dim, elementwise_affine=False, eps=1e-6)
         else:
             self.norm1_node = nn.LayerNorm(node_dim, elementwise_affine=True, eps=1e-6)
             self.norm2_node = nn.LayerNorm(node_dim, elementwise_affine=True, eps=1e-6)
             if self.pair_update:
                 self.norm1_edge = nn.LayerNorm(edge_dim, elementwise_affine=True, eps=1e-6)
-                self.norm2_edge = nn.LayerNorm(edge_dim, elementwise_affine=True, eps=1e-6)
+            self.norm2_edge = nn.LayerNorm(edge_dim, elementwise_affine=True, eps=1e-6)
 
 
     def _ff_block_node(self, x):
@@ -414,7 +409,7 @@ class EquivariantBlock(nn.Module):
         h_node = self.attn_mpnn(h, edge_index, edge_attr)
         h_edge = h_node[edge_index[0]] + h_node[edge_index[1]]
         h_edge = self.node2edge_lin(h_edge)
-        
+
         h_node = h_in_node + node_gate_msa * h_node if self.cond_time else h_in_node + h_node
         _h_node = modulate(self.norm2_node(h_node), node_shift_mlp, node_scale_mlp) * node_mask if self.cond_time else \
                 self.norm2_node(h_node) * node_mask
@@ -473,7 +468,7 @@ class EquivariantBlock(nn.Module):
         # apply transformer-based message passing, update node features and edge features (FFN + norm)
         h_node = self.attn_mpnn(h, edge_index, edge_attr)
         h_out = self.node_update(h_in_node, h_node, node_gate_msa, node_shift_mlp, node_scale_mlp, node_gate_mlp, node_mask)
-        
+
         if self.pair_update:
             h_edge = h_node[edge_index[0]] + h_node[edge_index[1]]
             h_edge_out = self.edge_update(h_in_edge, h_edge, edge_gate_msa, edge_shift_mlp, edge_scale_mlp, edge_gate_mlp)
@@ -494,7 +489,7 @@ class EquivariantBlock(nn.Module):
         h_out = (h_node + node_gate_mlp * self._ff_block_node(_h_node)) * node_mask if self.cond_time else \
                 (h_node + self._ff_block_node(_h_node)) * node_mask
         return h_out
-    
+
     @torch.compile(dynamic=True, disable=disable_compile)
     def edge_update(self, h_in_edge, h_edge, edge_gate_msa, edge_shift_mlp, edge_scale_mlp, edge_gate_mlp):
         h_edge = self.node2edge_lin(h_edge)
@@ -581,6 +576,14 @@ class DGTDiffusion(nn.Module):
             nn.Linear(time_dim, time_dim)
         )
 
+        # Conditional MLP
+        self.cond_mlp = nn.Sequential(
+            nn.Linear(1, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, hidden_dim)
+        )
+        self.cond_lin = nn.Linear(hidden_dim, time_dim) # multiple condition: hidden_dim -> cond_ch * hidden_dim
+
         # distance GBF embedding
         self.dist_gbf = GaussianLayer(edge_dim)
 
@@ -608,7 +611,7 @@ class DGTDiffusion(nn.Module):
         for i in range(self.n_blocks):
             self.add_module(f'block_{i}', EquivariantBlock(hidden_dim, edge_dim, time_dim,
                             args.n_heads, dropout=args.dropout, dist_emb=self.use_original_dgt, equi_pos=self.use_original_dgt, mlp_ratio=args.mlp_ratio, act=nn.GELU, pair_update=self.pair_update, fuse_qkv=args.fuse_qkv))
-        
+
         if self.use_original_dgt:
             assert self.enable_equiv
             assert not self.pred_noise
@@ -637,7 +640,7 @@ class DGTDiffusion(nn.Module):
                 if self.delta_train:
                     self.extended_node_emb = ExtendedProjector(self.node_emb, in_dim, hidden_dim, disable_extra_gelu=self.disable_extra_gelu)
 
-    def forward(self, data, lm_x=None):
+    def forward(self, data, lm_x=None, context=None):
         # sparse to dense format: node_h, node_mask, pos, t_cond, edge_h, edge_mask
         if self.enable_equiv:
             node_h, node_mask = pyg_utils.to_dense_batch(data.x, data.batch, batch_size=len(data['smiles']), max_num_nodes=data.max_seqlen)  # [B, N, node_nf], [B, N]
@@ -645,7 +648,7 @@ class DGTDiffusion(nn.Module):
             t_cond, _ = pyg_utils.to_dense_batch(data.t_cond, data.batch, batch_size=len(data['smiles']), max_num_nodes=data.max_seqlen)  # [B, N]
             edge_h = pyg_utils.to_dense_adj(data.edge_index, data.batch, data.edge_attr, batch_size=len(data['smiles']), max_num_nodes=data.max_seqlen)  # [B, N, N, edge_nf]
         else:
-            x = torch.cat((data.x, data.pos, data.t_cond.reshape(-1, 1)), dim=-1) 
+            x = torch.cat((data.x, data.pos, data.t_cond.reshape(-1, 1)), dim=-1)
             dense_x, node_mask = pyg_utils.to_dense_batch(x, data.batch, batch_size=len(data['smiles']), max_num_nodes=data.max_seqlen)  # [B, N, node_nf], [B, N]
             node_h, pos, t_cond = dense_x[:, :, :-1], dense_x[:, :, -4:-1], dense_x[:, :, -1]
             edge_h = pyg_utils.to_dense_adj(data.edge_index, data.batch, data.edge_attr, batch_size=len(data['smiles']), max_num_nodes=data.max_seqlen)  # [B, N, N, edge_nf]
@@ -658,6 +661,12 @@ class DGTDiffusion(nn.Module):
 
         # obtain conditional feature (noise level)
         time_emb = self.time_mlp(t_cond[:,0])  # [B, time_dim]
+
+        if context is not None:
+            condition = context.unsqueeze(-1)
+            condition = self.cond_lin(self.cond_mlp(condition).reshape(bs, -1))
+            time_emb = time_emb + condition
+
         node_time_emb = time_emb.unsqueeze(1).expand(bs, n_nodes, -1).reshape(bs*n_nodes, -1)
         edge_batch_id = torch.div(edge_index[0], n_nodes, rounding_mode='floor')
         edge_time_emb = time_emb[edge_batch_id]  # only keep valid edge
@@ -686,7 +695,7 @@ class DGTDiffusion(nn.Module):
             node_h = self.node_emb(node_h).reshape(bs * n_nodes, -1)
             node_cond = node_time_emb
             edge_cond = edge_time_emb
-            
+
         edge_h = self.edge_emb(edge_h)
 
         # run the equivariant block
@@ -710,6 +719,47 @@ class DGTDiffusion(nn.Module):
         # pyg dense to sparse
         pred_noise = pred_noise.reshape(bs * n_nodes, -1)[node_mask.reshape(-1)]
         if not self.disable_com:
-            pred_noise = remove_mean(pred_noise, data.batch, bs=bs)
+            pred_noise = remove_mean(pred_noise, data.batch)
         pred_pos = (data.pos - pred_noise.detach() * data.sigma_t) / data.alpha_t
+
+        if context is not None:
+            atom_type, _ = pyg_utils.to_dense_batch(data.atom_type, data.batch) # [B, N]
+            h0 = F.one_hot(atom_type, num_classes=5).float()
+
+            charges, _ = pyg_utils.to_dense_batch(data.charge, data.batch) # [B, N]
+
+            atom_mask = charges > 0 # [B, N]
+            node_mask = atom_mask
+            edge_mask = atom_mask.unsqueeze(1) * atom_mask.unsqueeze(2) # [B, N, N]
+            diag_mask = ~torch.eye(edge_mask.size(1), dtype=torch.bool).unsqueeze(0).to(pos.device)
+            edge_mask *= diag_mask
+
+            included_species = torch.unique(charges, sorted=True)
+            # if included_species[0] == 0:
+            #     included_species = included_species[1:]
+            one_hot = charges.unsqueeze(-1) == included_species.unsqueeze(0).unsqueeze(0)
+            nodes = one_hot.to(pos.device, torch.float32)
+            edges_dic = {}
+            def get_adj_matrix(n_nodes, batch_size, device):
+                if n_nodes in edges_dic:
+                    edges_dic_b = edges_dic[n_nodes]
+                    if batch_size in edges_dic_b:
+                        return edges_dic_b[batch_size]
+                    else:
+                        # get edges for a single sample
+                        rows, cols = [], []
+                        for batch_idx in range(batch_size):
+                            for i in range(n_nodes):
+                                for j in range(n_nodes):
+                                    rows.append(i + batch_idx * n_nodes)
+                                    cols.append(j + batch_idx * n_nodes)
+                else:
+                    edges_dic[n_nodes] = {}
+                    return get_adj_matrix(n_nodes, batch_size, device)
+
+                edges = [torch.LongTensor(rows).to(device), torch.LongTensor(cols).to(device)]
+                return edges
+            full_edges = get_adj_matrix(n_nodes, bs, pos.device)
+            return pred_pos, pred_noise, [nodes.reshape(bs * n_nodes, -1), pos, full_edges, None, node_mask.reshape(bs * n_nodes, -1), edge_mask.view(bs * n_nodes * n_nodes, 1), n_nodes]
+
         return pred_pos, pred_noise
