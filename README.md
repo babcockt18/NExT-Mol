@@ -1,5 +1,9 @@
 # NEXT-MOL: 3D DIFFUSION MEETS 1D LANGUAGE MODELING FOR 3D MOLECULE GENERATION
 
+## Note
+
+We are still in in-progress open sourcing all parts of NExT-Mol. Shoot us an Email if your interested part is missing!
+
 ## New Environment Setup
 
 - conda create -n nextmol python=3.8
@@ -206,3 +210,14 @@ The prediction results will be saved under `all_checkpoints/eval_dmt_l_drugs/lig
 python eval_confs.py --input all_checkpoints/eval_dmt_l_drugs/lightning_logs/version_0/predict.pkl --dataset Geom-drugs-df --root "./data/GEOM-DRUGS"
 ```
 
+## Citation
+
+```bib
+@inproceedings{liu2025nextmol,
+title={{NExT}-{Mol}: 3D Diffusion Meets 1D Language Modeling for 3D Molecule Generation},
+author={Zhiyuan Liu and Yanchen Luo and Han Huang and Enzhi Zhang and Sihang Li and Junfeng Fang and Yaorui Shi and Xiang Wang and Kenji Kawaguchi and Tat-Seng Chua},
+booktitle={The Thirteenth International Conference on Learning Representations},
+year={2025},
+url={https://openreview.net/forum?id=p66a00KLWN}
+}
+```
