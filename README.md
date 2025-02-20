@@ -4,7 +4,7 @@ Codes of our ICLR2025 paper.
 
 Authors: Zhiyuan Liu*, Yanchen Luo*, Han Huang, Enzhi Zhang, Sihang Li, Junfeng Fang, Yaorui Shi, Xiang Wang, Kenji Kawaguchi, Tat-Seng Chua
 
-\* denote equal contribution.
+\* denotes equal contribution.
 
 ## Update
 
