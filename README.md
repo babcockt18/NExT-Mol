@@ -1,6 +1,6 @@
 # NEXT-MOL: 3D DIFFUSION MEETS 1D LANGUAGE MODELING FOR 3D MOLECULE GENERATION
 
-Codes of our ICLR2025 paper.
+Codes of our ICLR2025 paper: [NExT-Mol: 3D Diffusion Meets 1D Language Modeling for 3D Molecule Generation](https://www.arxiv.org/abs/2502.12638)
 
 Authors: Zhiyuan Liu*, Yanchen Luo*, Han Huang, Enzhi Zhang, Sihang Li, Junfeng Fang, Yaorui Shi, Xiang Wang, Kenji Kawaguchi, Tat-Seng Chua
 
