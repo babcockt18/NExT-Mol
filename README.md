@@ -24,7 +24,14 @@ We are still in in-progress open sourcing all parts of NExT-Mol. Shoot us an Ema
 
 ## Pretrained Models
 
-You can find the pretrained MoLlama model in the following link [OSF](https://osf.io/gqy39/?view_only=5905ef8957f9444a8808fd49933b35c7). Download it and save it at `all_checkpoints/mollama.ckpt`.
+You can load our pretrained MoLlama model with the huggingface package [link](https://huggingface.co/acharkq/MoLlama):
+
+```python
+llm = LlamaForCausalLM.from_pretrained('acharkq/MoLlama')
+tokenizer = AutoTokenizer.from_pretrained('acharkq/MoLlama')
+tokenizer.add_bos_token = True
+tokenizer.add_eos_token = True
+```
 
 You can find the pretrained DMT-B and DMT-L checkpoints in the following link [OSF](https://osf.io/gqy39/?view_only=5905ef8957f9444a8808fd49933b35c7)
 
