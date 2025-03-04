@@ -55,7 +55,7 @@ python llm_train.py  \
     --llm_tune full  \
     --filename 'qm9_llm' \
     --generate_eval_epoch 5 \
-    --llm_model "./all_checkpoints/mollama/" \
+    --llm_model "acharkq/MoLlama" \
     --rand_smiles restricted \
     --temperature 1.0 \
     --num_beams 1 \
@@ -76,7 +76,7 @@ python train_uncond_gene.py  \
     --dataset "QM9-jodo" \
     --root path-to-QM92014 \
     --filename "qm9_denovo_gen" \
-    --llm_model "./all_checkpoints/mollama/" \
+    --llm_model "acharkq/MoLlama" \
     --num_workers 4 \
     --batch_size 128 \
     --max_epochs 40000 \
@@ -109,7 +109,7 @@ python llm_train.py  \
     --llm_tune full  \
     --filename "drugs_llm" \
     --generate_eval_epoch 10 \
-    --llm_model "./all_checkpoints/mollama/" \
+    --llm_model "acharkq/MoLlama" \
     --rand_smiles restricted \
     --temperature 1.0 \
     --num_beams 1 \
@@ -130,7 +130,7 @@ python train_uncond_gene.py  \
     --dataset "GeomDrugs-JODO" \
     --root path-to-geom-drugs-jodo \
     --filename "drugs_denovo_gen" \
-    --llm_model "./all_checkpoints/mollama/" \
+    --llm_model "acharkq/MoLlama" \
     --num_workers 4 \
     --batch_size 128 \
     --max_epochs 40000 \
@@ -162,7 +162,7 @@ python llm_train.py  \
     --llm_tune full  \
     --filename "qm9_llm_conditional_${condition}" \
     --generate_eval_epoch 5 \
-    --llm_model "./all_checkpoints/mollama/" \
+    --llm_model "acharkq/MoLlama" \
     --rand_smiles restricted \
     --temperature 1.0 \
     --num_beams 5 \
@@ -187,7 +187,7 @@ python train_lm_conf.py \
     --num_workers 4 \
     --save_every_n_epochs 50  \
     --filename "conditional_eval_${condition}" \
-    --llm_model "./all_checkpoints/mollama/" \
+    --llm_model "acharkq/MoLlama" \
     --check_val_every_n_epoch 200 \
     --conform_eval_epoch 100 \
     --generate_eval_epoch 50  \
@@ -212,7 +212,7 @@ Dataset: Find the preprocessed dataset named "GEOM-QM9.zip" in the link [OSF](ht
 **Stage 1: DMT training**
 
 ```bash
-python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --batch_size 256 --num_workers 4 --max_epochs 2000 --mode train --save_every_n_epochs 50  --filename 'dmt-b-qm9' --llm_model "./all_checkpoints/mollama/"  --test_conform_epoch 50 --conform_eval_epoch 50 --generate_eval_epoch 50  --sampling_steps 100
+python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --batch_size 256 --num_workers 4 --max_epochs 2000 --mode train --save_every_n_epochs 50  --filename 'dmt-b-qm9' --llm_model "acharkq/MoLlama"  --test_conform_epoch 50 --conform_eval_epoch 50 --generate_eval_epoch 50  --sampling_steps 100
 ```
 
 **Stage 2 and Stage 3:** 
@@ -220,7 +220,7 @@ python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --batch_size
 Given the pretrained checkpoint, save it at `all_checkpoints/dmt_b_qm9.ckpt`, you can leverage it for integration with the MoLlama:
 
 ```bash
-python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --batch_size 256 --num_workers 4 --max_epochs 500 --mode train --save_every_n_epochs 50 --filename "dmt-b-llm-qm9"  --llm_model "./all_checkpoints/mollama/" --test_conform_epoch 50 --conform_eval_epoch 50 --check_val_every_n_epoch 5  --generate_eval_epoch 50 --sampling_steps 100 --use_llm  --delta_train --rand_smiles canonical --use_self_att_proj --llm_jk mean --use_llm_projector --llm_tune lora --tune_embedding --use_flash_attention --diff_ckpt "all_checkpoints/dmt_b_qm9.ckpt";
+python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --batch_size 256 --num_workers 4 --max_epochs 500 --mode train --save_every_n_epochs 50 --filename "dmt-b-llm-qm9"  --llm_model "acharkq/MoLlama" --test_conform_epoch 50 --conform_eval_epoch 50 --check_val_every_n_epoch 5  --generate_eval_epoch 50 --sampling_steps 100 --use_llm  --delta_train --rand_smiles canonical --use_self_att_proj --llm_jk mean --use_llm_projector --llm_tune lora --tune_embedding --use_flash_attention --diff_ckpt "all_checkpoints/dmt_b_qm9.ckpt";
 ```
 
 
@@ -235,7 +235,7 @@ Dataset: Find the preprocessed dataset named "GEOM-DRUGS.zip" under the **OneDri
 
 ```bash
 {
-python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --in_node_features 74  --warmup_steps 1000 --batch_size 32 --num_workers 2 --max_epochs 16000 --mode train --save_every_n_epochs 200 --n_blocks 12 --hidden_size 768  --filename "dmt-l-drugs"    --llm_model "./all_checkpoints/mollama/"  --test_conform_epoch 100000 --conform_eval_epoch 100000 --check_val_every_n_epoch 20 --generate_eval_epoch 100000 --sampling_steps 100 --world_size 8 --accumulate_grad_batches 2;
+python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --in_node_features 74  --warmup_steps 1000 --batch_size 32 --num_workers 2 --max_epochs 16000 --mode train --save_every_n_epochs 200 --n_blocks 12 --hidden_size 768  --filename "dmt-l-drugs"    --llm_model "acharkq/MoLlama"  --test_conform_epoch 100000 --conform_eval_epoch 100000 --check_val_every_n_epoch 20 --generate_eval_epoch 100000 --sampling_steps 100 --world_size 8 --accumulate_grad_batches 2;
 exit
 }
 ```
@@ -245,7 +245,7 @@ Notice that, you will need to stop the training manually at the 3000 epoch.
 **Stage 2 and Stage 3:** Given the pretrained checkpoint, save it at `all_checkpoints/dmt_l_drugs.ckpt`, you can leverage it for integration training (both stage 2 and stage 3) with the MoLlama:
 
 ```bash
-python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --in_node_features 74 --batch_size 256 --num_workers 4 --max_epochs 500 --mode train --save_every_n_epochs 50 --filename "dmt-b-llm-qm9"  --n_blocks 12 --hidden_size 768 --llm_model "./all_checkpoints/mollama/" --test_conform_epoch 10000 --conform_eval_epoch 10000 --check_val_every_n_epoch 5  --generate_eval_epoch 10000 --sampling_steps 100 --use_llm  --delta_train --rand_smiles canonical --use_self_att_proj --llm_jk mean --use_llm_projector --llm_tune lora --tune_embedding --use_flash_attention --diff_ckpt "all_checkpoints/dmt_l_drugs.ckpt" --world_size 8 --accumulate_grad_batches 2;
+python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --in_node_features 74 --batch_size 256 --num_workers 4 --max_epochs 500 --mode train --save_every_n_epochs 50 --filename "dmt-b-llm-qm9"  --n_blocks 12 --hidden_size 768 --llm_model "acharkq/MoLlama" --test_conform_epoch 10000 --conform_eval_epoch 10000 --check_val_every_n_epoch 5  --generate_eval_epoch 10000 --sampling_steps 100 --use_llm  --delta_train --rand_smiles canonical --use_self_att_proj --llm_jk mean --use_llm_projector --llm_tune lora --tune_embedding --use_flash_attention --diff_ckpt "all_checkpoints/dmt_l_drugs.ckpt" --world_size 8 --accumulate_grad_batches 2;
 ```
 
 You can similarly train DMT-B for GEOM-DRUGS by removing the `--n_blocks 12 --hidden_size 768` command from the scripts above.
@@ -261,7 +261,7 @@ Download our pretrained DMT-B checkpoints from the following link [OSF](https://
 
 ```bash
 export CUDA_VISIBLE_DEVICES='0,1';
-python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --infer_batch_size 512 --num_workers 4 --mode eval_test_conform  --filename 'eval_dmt_b_qm9' --llm_model "./all_checkpoints/mollama/"  --sampling_steps 100 --init_checkpoint "all_checkpoints/qm9_dmt_b_e1999.ckpt" --dropout 0.05;
+python train_lm_conf.py --dataset "QM9-df" --root "./data/GEOM-QM9" --infer_batch_size 512 --num_workers 4 --mode eval_test_conform  --filename 'eval_dmt_b_qm9' --llm_model "acharkq/MoLlama"  --sampling_steps 100 --init_checkpoint "all_checkpoints/qm9_dmt_b_e1999.ckpt" --dropout 0.05;
 ```
 
 **GEOM-DRUGS dataset**
@@ -270,7 +270,7 @@ Download our pretrained DMT-L checkpoints from the following link [OSF](https://
 
 ```bash
 export CUDA_VISIBLE_DEVICES='0,1';
-python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --num_workers 4--mode eval_test_conform --filename "eval_dmt_l_drugs" --llm_model "./all_checkpoints/mollama/" --in_node_features 74 --init_checkpoint "all_checkpoints/drugs_dmt_l_e2999.ckpt" --save_eval_only --infer_batch_size 512 --world_size 2 --load_test_only --dropout 0.05;
+python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --num_workers 4--mode eval_test_conform --filename "eval_dmt_l_drugs" --llm_model "acharkq/MoLlama" --in_node_features 74 --init_checkpoint "all_checkpoints/drugs_dmt_l_e2999.ckpt" --save_eval_only --infer_batch_size 512 --world_size 2 --load_test_only --dropout 0.05;
 ```
 
 The prediction results will be saved under `all_checkpoints/eval_dmt_l_drugs/lightning_logs` as a pickle file. Because the GEOM-DRUGS dataset is too large, we need to run separate evaluation command to obtain the evaluation results:
