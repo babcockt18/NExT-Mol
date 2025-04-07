@@ -270,8 +270,19 @@ Download our pretrained DMT-L checkpoints from the following link [OSF](https://
 
 ```bash
 export CUDA_VISIBLE_DEVICES='0,1';
-python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --num_workers 4--mode eval_test_conform --filename "eval_dmt_l_drugs" --llm_model "acharkq/MoLlama" --in_node_features 74 --init_checkpoint "all_checkpoints/drugs_dmt_l_e2999.ckpt" --save_eval_only --infer_batch_size 512 --world_size 2 --load_test_only --dropout 0.05;
+# python train_lm_conf.py --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --num_workers 4--mode eval_test_conform --filename "eval_dmt_l_drugs" --llm_model "acharkq/MoLlama" --in_node_features 74 --init_checkpoint "all_checkpoints/drugs_dmt_l_e2999.ckpt" --save_eval_only --infer_batch_size 512 --world_size 2 --load_test_only --dropout 0.05;
+python train_lm_conf.py  --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --num_workers 4 --mode eval_test_conform --filename "eval_dmt_l_drugs" --llm_model "acharkq/MoLlama" --in_node_features 74 --init_checkpoint "all_checkpoints/eval_dmt_l_drugs/drugs_dmt_l_e2999.ckpt" --save_eval_only --infer_batch_size 512 --world_size 2 --load_test_only --dropout 0.05 --hidden_size 768 --n_blocks 12
 ```
+
+
+Load the DMT-B model:
+
+```bash
+python train_lm_conf.py  --dataset "Geom-drugs-df" --root "./data/GEOM-DRUGS" --num_workers 4 --mode eval_test_conform --filename "eval_dmt_l_drugs" --llm_model "acharkq/MoLlama" --in_node_features 74 --init_checkpoint "all_checkpoints/eval_dmt_l_drugs/drugs_dmt_b_e2999.ckpt" --save_eval_only --infer_batch_size 512 --world_size 2 --load_test_only --dropout 0.05 --fuse_qkv --not_pair_update
+```
+
+Comment: need to remove the self.ff_linear4, self.ff_linear3, cond_mlp modules in code.
+
 
 The prediction results will be saved under `all_checkpoints/eval_dmt_l_drugs/lightning_logs` as a pickle file. Because the GEOM-DRUGS dataset is too large, we need to run separate evaluation command to obtain the evaluation results:
 
