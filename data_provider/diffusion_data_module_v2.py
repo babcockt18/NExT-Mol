@@ -29,7 +29,7 @@ from evaluation.eval_functions import get_sub_geometry_metric
 from rdkit import Chem
 import copy
 from data_provider.mol_mapping_utils import get_smiles2selfies_mapping, build_rdkit2rand_smiles_withoutH_mapping
-from utils.featurization import featurize_mol, featurize_mol_from_smiles_v2, qm9_types, drugs_types
+from mol_utils.featurization import featurize_mol, featurize_mol_from_smiles_v2, qm9_types, drugs_types
 from data_provider.lap_utils import compute_posenc_stats
 from evaluation.jodo.bond_analyze import allowed_bonds
 
