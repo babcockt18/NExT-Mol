@@ -753,7 +753,7 @@ class DiffussionPL(L.LightningModule):
                 pred_pos, _ = self.diffusion_model(data_batch, lm_x)
 
             pos_mean = (alpha_t_given_s * sigma_s ** 2 / sigma_t ** 2) * data_batch.pos + (alpha_s * sigma2_t_given_s / sigma_t ** 2) * pred_pos
-            pos_mean = remove_mean(pos_mean, data_batch.batch, bs=bs)
+            pos_mean = remove_mean(pos_mean, data_batch.batch)
 
             if self.disable_com:
                 epsilon_pos = torch.randn(data_batch.pos.shape, device=data_batch.pos.device)
