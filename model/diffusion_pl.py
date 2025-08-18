@@ -999,13 +999,18 @@ def conformer_evaluation_V2(predict_rdmol_list, gt_conf_list_list, threshold, nu
     num_additional_failure = 0
     if num_process > 1:
         args_chunks = [(idx, args_list[idx::num_process]) for idx in range(num_process)]
-        with multiprocessing.get_context('spawn').Pool(processes=num_process) as pool:
-            for result in pool.map(process_rmsd, args_chunks):
+        pool = multiprocessing.get_context('spawn').Pool(processes=num_process)
+        try:
+            results = pool.map(process_rmsd, args_chunks)
+            for result in results:
                 for mol_idx, rmsd_list, failures in result:
                     if mol_idx not in rmsd_results:
                         rmsd_results[mol_idx] = []
                     rmsd_results[mol_idx].append(rmsd_list)
                     num_additional_failure += failures
+        finally:
+            pool.close()
+            pool.join()
     else:
         results = process_rmsd((1, args_list))
         for mol_idx, rmsd_list, failures in results:
