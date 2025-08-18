@@ -1069,7 +1069,8 @@ def conformer_evaluation_V2(predict_rdmol_list, gt_conf_list_list, threshold, nu
 
     if logger is not None:
         # Log conformer metrics explicitly for DataLoader 1 to avoid duplication
-        log_kwargs = {'sync_dist': False, 'batch_size': len(predict_rdmol_list)}
+        # Use sync_dist=True for epoch-level logging in distributed settings
+        log_kwargs = {'sync_dist': True, 'batch_size': len(predict_rdmol_list)}
         if dataloader_idx is not None:
             # Add dataloader_idx to prevent metrics from appearing under both dataloaders
             log_kwargs['add_dataloader_idx'] = False
