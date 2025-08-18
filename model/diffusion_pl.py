@@ -492,9 +492,10 @@ class DiffussionPL(L.LightningModule):
             with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
                 context = getattr(data_batch, 'context', None)
                 loss, lm_loss, diff_loss = self.forward(data_batch, selfies_batch, context)
-            self.log('val_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_loss', loss, sync_dist=True, batch_size=batch_size)
+            # Log losses only for DataLoader 0
+            self.log('val_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size, add_dataloader_idx=False)
+            self.log('val_diff_loss', diff_loss, sync_dist=True, batch_size=batch_size, add_dataloader_idx=False)
+            self.log('val_loss', loss, sync_dist=True, batch_size=batch_size, add_dataloader_idx=False)
 
         elif dataloader_idx == 1:
             train_epoch_condition = (self.current_epoch + 1) % self.args.test_conform_epoch == 0 and self.args.mode == 'train'
@@ -548,7 +549,9 @@ class DiffussionPL(L.LightningModule):
                 if self.save_eval_only:
                     with open(log_dir / 'predict.pkl', 'wb') as f:
                         pickle.dump((test_rdmol_list, threshold, num_failures), f)
-                metrics = conformer_evaluation_V2(test_rdmol_list, self.trainer.datamodule.test_dataset.gt_conf_list, threshold, num_failures, logger=self, dataset_name=self.args.dataset, num_process=10)
+                # Pass dataloader_idx=1 to conformer_evaluation_V2 since conformers come from DataLoader 1
+                metrics = conformer_evaluation_V2(test_rdmol_list, self.trainer.datamodule.test_dataset.gt_conf_list, threshold, num_failures, 
+                                                 logger=self, dataset_name=self.args.dataset, num_process=10, dataloader_idx=1)
 
     def simple_validation_eval(self, rdmol_list, threshold):
         '''
@@ -971,7 +974,7 @@ def process_rmsd(inputs):
         result_list.append((mol_idx, rmsd_list, failures))
     return result_list
 
-def conformer_evaluation_V2(predict_rdmol_list, gt_conf_list_list, threshold, num_failures, logger=None, num_process=1, dataset_name='QM9'):
+def conformer_evaluation_V2(predict_rdmol_list, gt_conf_list_list, threshold, num_failures, logger=None, num_process=1, dataset_name='QM9', dataloader_idx=None):
     id2predict_mols = {}
     for data in predict_rdmol_list:
         mol_idx, smiles, rdmol = data
@@ -1065,9 +1068,18 @@ def conformer_evaluation_V2(predict_rdmol_list, gt_conf_list_list, threshold, nu
     print(metrics)
 
     if logger is not None:
+        # Log conformer metrics explicitly for DataLoader 1 to avoid duplication
+        log_kwargs = {'sync_dist': False, 'batch_size': len(predict_rdmol_list)}
+        if dataloader_idx is not None:
+            # Add dataloader_idx to prevent metrics from appearing under both dataloaders
+            log_kwargs['add_dataloader_idx'] = False
+            
         for metric in ['recall_coverage_mean', 'recall_coverage_median', 'recall_amr_mean', 'recall_amr_median', 'precision_coverage_mean', 'precision_coverage_median', 'precision_amr_mean', 'precision_amr_median']:
-            logger.log(f"test/{metric}", metrics[metric], sync_dist=False, batch_size=len(predict_rdmol_list))
+            # Prefix with dataloader index if provided to distinguish metrics
+            metric_name = f"test/{metric}" if dataloader_idx is None else f"test/dl{dataloader_idx}/{metric}"
+            logger.log(metric_name, metrics[metric], **log_kwargs)
         for metric in ['MolStable', 'AtomStable', 'Validity', 'Unique', 'Novelty', 'Complete']:
-            logger.log(f"test/{metric}_3D", metrics[f"{metric}_3D"], sync_dist=False, batch_size=len(predict_rdmol_list))
+            metric_name = f"test/{metric}_3D" if dataloader_idx is None else f"test/dl{dataloader_idx}/{metric}_3D"
+            logger.log(metric_name, metrics[f"{metric}_3D"], **log_kwargs)
 
     return metrics
