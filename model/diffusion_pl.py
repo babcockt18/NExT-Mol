@@ -491,7 +491,7 @@ class DiffussionPL(L.LightningModule):
             train_epoch_condition = (self.current_epoch + 1) % self.args.conform_eval_epoch == 0 and self.args.mode == 'train'
             with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
                 context = getattr(data_batch, 'context', None)
-                loss, lm_loss, diff_loss, MAE_loss = self.forward(data_batch, selfies_batch, context)
+                loss, lm_loss, diff_loss = self.forward(data_batch, selfies_batch, context)
             self.log('val_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
             self.log('val_diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
             self.log('val_loss', loss, sync_dist=True, batch_size=batch_size)
