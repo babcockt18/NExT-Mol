@@ -943,7 +943,7 @@ def conformer_evaluation(predict_rdmol_list, gt_conf_list_list, threshold, num_f
         print('\n\n\n')
 
     predict_rdmol_list = [data[2] for data in predict_rdmol_list]
-    eval_results_3d_unimol = get_3D_edm_metric(predict_rdmol_list)
+    eval_results_3d_unimol, _ = get_3D_edm_metric(predict_rdmol_list)
 
     if logger is not None:
         logger.log('test/MolStable_3D', eval_results_3d_unimol['mol_stable'], sync_dist=False, batch_size=len(predict_rdmol_list))
@@ -1049,7 +1049,7 @@ def conformer_evaluation_V2(predict_rdmol_list, gt_conf_list_list, threshold, nu
     print(metrics)
 
     predict_rdmol_list = [data[2] for data in predict_rdmol_list]
-    eval_results_3d_unimol = get_3D_edm_metric(predict_rdmol_list, dataset_name=dataset_name)
+    eval_results_3d_unimol, _ = get_3D_edm_metric(predict_rdmol_list, dataset_name=dataset_name)
 
     metrics['MolStable_3D'] = eval_results_3d_unimol['mol_stable']
     metrics['AtomStable_3D'] = eval_results_3d_unimol['atom_stable']

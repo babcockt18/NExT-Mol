@@ -244,7 +244,7 @@ class UniMolConfTrain(L.LightningModule):
         self.log('cov_median', cov_median, sync_dist=True)
         self.log('mat_median', mat_median, sync_dist=True)
 
-        eval_results_3d_unimol = get_3D_edm_metric(predict_mol_list)
+        eval_results_3d_unimol, _ = get_3D_edm_metric(predict_mol_list)
         self.log('MolStable_3D_unimol', eval_results_3d_unimol['mol_stable'], sync_dist=True)
         self.log('AtomStable_3D_unimol', eval_results_3d_unimol['atom_stable'], sync_dist=True)
         self.log('Validity_3D_unimol', eval_results_3d_unimol['Validity'], sync_dist=True)
