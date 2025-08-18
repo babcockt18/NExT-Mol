@@ -67,8 +67,13 @@ def main(args):
             state_dict = ckpt['state_dict']
 
         model = DiffussionPL(args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens, noise_scheduler=dm.noise_scheduler, pos_std=dm.pos_std, property_normalizations=dm.prop_norms, property_distribution=dm.prop_dist)
-        model.load_state_dict(state_dict, strict=True)
+        # Load with strict=False to handle missing conditional MLP keys in older checkpoints
+        missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
         print(f"Loading {'EMA ' if args.use_ema else ''}model from {args.init_checkpoint}")
+        if missing_keys:
+            print(f"Warning: Missing keys in checkpoint: {missing_keys}")
+        if unexpected_keys:
+            print(f"Warning: Unexpected keys in checkpoint: {unexpected_keys}")
     else:
         model = DiffussionPL(args, tokenizer=tokenizer, max_sf_tokens=dm.max_sf_tokens, noise_scheduler=dm.noise_scheduler, pos_std=dm.pos_std, property_normalizations=dm.prop_norms, property_distribution=dm.prop_dist)
     model.train()
