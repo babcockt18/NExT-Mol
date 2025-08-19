@@ -24,9 +24,11 @@ class UncondGenPL(DiffussionPL):
             train_epoch_condition = (self.current_epoch + 1) % self.args.conform_eval_epoch == 0 and self.args.mode == 'train'
             with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
                 loss, lm_loss, diff_loss = self.forward(data_batch, selfies_batch)
-            self.log('val_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_loss', loss, sync_dist=True, batch_size=batch_size)
+            
+            # Use inherited helper methods for consistent val/ prefix
+            self.log_val('lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+            self.log_val('diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
+            self.log_val('loss', loss, sync_dist=True, batch_size=batch_size)
 
         elif dataloader_idx == 1:
             train_epoch_condition = (self.current_epoch + 1) % self.args.test_conform_epoch == 0 and self.args.mode == 'train'
@@ -81,17 +83,18 @@ class UncondGenPL(DiffussionPL):
                     eval_results_moses =  self.trainer.datamodule.get_moses_metrics(reconstructed_3d_mols)
                     print(eval_results_moses)
 
-                    self.log('MolStable_3D', eval_results_3d_unimol['mol_stable'], sync_dist=True)
-                    self.log('AtomStable_3D', eval_results_3d_unimol['atom_stable'], sync_dist=True)
-                    self.log('Validity_3D', eval_results_3d_unimol['Validity'], sync_dist=True)
-                    self.log('Novelty_3D', eval_results_3d_unimol['Novelty'], sync_dist=True)
-                    self.log('Complete_3D', eval_results_3d_unimol['Complete'], sync_dist=True)
+                    # Use test/ prefix for generation evaluation metrics
+                    self.log_test('mol_stable_3d', eval_results_3d_unimol['mol_stable'], sync_dist=True)
+                    self.log_test('atom_stable_3d', eval_results_3d_unimol['atom_stable'], sync_dist=True)
+                    self.log_test('validity_3d', eval_results_3d_unimol['Validity'], sync_dist=True)
+                    self.log_test('novelty_3d', eval_results_3d_unimol['Novelty'], sync_dist=True)
+                    self.log_test('complete_3d', eval_results_3d_unimol['Complete'], sync_dist=True)
 
-                    self.log('bond_length_mean', sub_geometry_metric['bond_length_mean'], sync_dist=True)
-                    self.log('bond_angle_mean', sub_geometry_metric['bond_angle_mean'], sync_dist=True)
-                    self.log('dihedral_angle_mean', sub_geometry_metric['dihedral_angle_mean'], sync_dist=True)
+                    self.log_test('bond_length_mean', sub_geometry_metric['bond_length_mean'], sync_dist=True)
+                    self.log_test('bond_angle_mean', sub_geometry_metric['bond_angle_mean'], sync_dist=True)
+                    self.log_test('dihedral_angle_mean', sub_geometry_metric['dihedral_angle_mean'], sync_dist=True)
 
-                    self.log('fcd_3d', eval_results_moses['FCD'], sync_dist=True)
+                    self.log_test('fcd_3d', eval_results_moses['FCD'], sync_dist=True)
 
     @torch.no_grad()
     def sample(self, data_batch, selfies_batch, T=None):

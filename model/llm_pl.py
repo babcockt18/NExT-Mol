@@ -220,16 +220,16 @@ class LLMPL(L.LightningModule):
             loss = lm_loss + self.aug_inv * inv_loss
             batch_size = selfies_batch0.input_ids.shape[0]
             self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], sync_dist=True, batch_size=batch_size)
-            self.log('train_loss', loss, sync_dist=True, batch_size=batch_size)
-            self.log('train_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-            self.log('train_inv_loss', inv_loss, sync_dist=True, batch_size=batch_size)
+            self.log('train/loss', loss, sync_dist=True, batch_size=batch_size)
+            self.log('train/lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+            self.log('train/inv_loss', inv_loss, sync_dist=True, batch_size=batch_size)
             return loss
         else:
             selfies_batch = batch
             lm_loss, _ = self.forward(selfies_batch)
             batch_size = selfies_batch.input_ids.shape[0]
             self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], sync_dist=True, batch_size=batch_size)
-            self.log('train_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+            self.log('train/lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
             return lm_loss
 
     @torch.no_grad()
@@ -252,14 +252,14 @@ class LLMPL(L.LightningModule):
             inv_loss = ((ppl0 - ppl1) ** 2).mean()
             loss = lm_loss + self.aug_inv * inv_loss
             batch_size = selfies_batch0.input_ids.shape[0]
-            self.log('train_loss', loss, sync_dist=True, batch_size=batch_size)
-            self.log('train_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-            self.log('train_inv_loss', inv_loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/loss', loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/inv_loss', inv_loss, sync_dist=True, batch_size=batch_size)
         else:
             selfies_batch = batch
             lm_loss, _ = self.forward(selfies_batch)
             batch_size = selfies_batch.input_ids.shape[0]
-            self.log('val_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
 
 
     @torch.no_grad()
@@ -284,24 +284,24 @@ class LLMPL(L.LightningModule):
         sampled_rdmols = [Chem.MolFromSmiles(smiles_without_chirality) for smiles_without_chirality in smiles_without_chirality_list]
         sampled_rdmols = [Chem.AddHs(mol) for mol in sampled_rdmols if mol is not None]
         eval_results_2d = get_2D_edm_metric(sampled_rdmols, self.trainer.datamodule.train_rdmols)
-        self.log('MolStable', eval_results_2d['mol_stable'], rank_zero_only=True)
-        self.log('AtomStable', eval_results_2d['atom_stable'], rank_zero_only=True)
-        self.log('Validity', eval_results_2d['Validity'], rank_zero_only=True)
-        self.log('Novelty', eval_results_2d['Novelty'], rank_zero_only=True)
-        self.log('Complete', eval_results_2d['Complete'], rank_zero_only=True)
-        self.log('Unique', eval_results_2d['Unique'], rank_zero_only=True)
+        self.log('test/mol_stable', eval_results_2d['mol_stable'], rank_zero_only=True)
+        self.log('test/atom_stable', eval_results_2d['atom_stable'], rank_zero_only=True)
+        self.log('test/validity', eval_results_2d['Validity'], rank_zero_only=True)
+        self.log('test/novelty', eval_results_2d['Novelty'], rank_zero_only=True)
+        self.log('test/complete', eval_results_2d['Complete'], rank_zero_only=True)
+        self.log('test/unique', eval_results_2d['Unique'], rank_zero_only=True)
 
         moses_metrics = self.trainer.datamodule.get_moses_metrics(sampled_rdmols)
-        self.log('FCD', moses_metrics['FCD'], rank_zero_only=True)
-        self.log('SNN', moses_metrics['SNN'], rank_zero_only=True)
-        self.log('Frag', moses_metrics['Frag'], rank_zero_only=True)
-        self.log('Scaf', moses_metrics['Scaf'], rank_zero_only=True)
-        self.log('IntDiv', moses_metrics['IntDiv'], rank_zero_only=True)
-        self.log('Filters', moses_metrics['Filters'], rank_zero_only=True)
-        self.log('QED', moses_metrics['QED'], rank_zero_only=True)
-        self.log('SA', moses_metrics['SA'], rank_zero_only=True)
-        self.log('logP', moses_metrics['logP'], rank_zero_only=True)
-        self.log('weight', moses_metrics['weight'], rank_zero_only=True)
+        self.log('test/fcd', moses_metrics['FCD'], rank_zero_only=True)
+        self.log('test/snn', moses_metrics['SNN'], rank_zero_only=True)
+        self.log('test/frag', moses_metrics['Frag'], rank_zero_only=True)
+        self.log('test/scaf', moses_metrics['Scaf'], rank_zero_only=True)
+        self.log('test/intdiv', moses_metrics['IntDiv'], rank_zero_only=True)
+        self.log('test/filters', moses_metrics['Filters'], rank_zero_only=True)
+        self.log('test/qed', moses_metrics['QED'], rank_zero_only=True)
+        self.log('test/sa', moses_metrics['SA'], rank_zero_only=True)
+        self.log('test/logp', moses_metrics['logP'], rank_zero_only=True)
+        self.log('test/weight', moses_metrics['weight'], rank_zero_only=True)
 
 
     @torch.no_grad()

@@ -462,6 +462,19 @@ class DiffussionPL(L.LightningModule):
         self.delta_train = False
         self.save_hyperparameters(args)
 
+    # Helper methods for consistent metric logging
+    def log_train(self, key, value, **kwargs):
+        """Log training metrics with train/ prefix"""
+        self.log(f"train/{key}", value, **kwargs)
+
+    def log_val(self, key, value, **kwargs):
+        """Log validation metrics with val/ prefix"""
+        self.log(f"val/{key}", value, **kwargs)
+
+    def log_test(self, key, value, **kwargs):
+        """Log test metrics with test/ prefix"""
+        self.log(f"test/{key}", value, **kwargs)
+
     def training_step(self, batch):
         if self.scheduler:
             self.scheduler.step(self.trainer.global_step)
@@ -469,12 +482,17 @@ class DiffussionPL(L.LightningModule):
         batch_size = len(data_batch.smiles)
         with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
             loss, lm_loss, diff_loss, MAE_loss = self.forward(data_batch, selfies_batch, data_batch.context)
+        
+        # Keep LR as-is for continuity
         self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], sync_dist=True, batch_size=batch_size)
-        self.log('train_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-        self.log('train_diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
-        self.log('train_loss', loss, sync_dist=True, batch_size=batch_size)
+        
+        # Use helper methods for consistent train/ prefix
+        self.log_train('lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+        self.log_train('diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
+        self.log_train('loss', loss, sync_dist=True, batch_size=batch_size)
+        
         if MAE_loss is not None:
-            self.log(f"train_MAE_loss_{self.condition_property}", MAE_loss, sync_dist=True, batch_size=batch_size)
+            self.log_train(f"mae_{self.condition_property}", MAE_loss, sync_dist=True, batch_size=batch_size)
         return loss
 
 
@@ -488,22 +506,33 @@ class DiffussionPL(L.LightningModule):
         batch_size = len(data_batch.smiles)
 
         if dataloader_idx == 0:
+            # Validation dataloader - compute and log validation losses
             train_epoch_condition = (self.current_epoch + 1) % self.args.conform_eval_epoch == 0 and self.args.mode == 'train'
             with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
                 context = getattr(data_batch, 'context', None)
                 loss, lm_loss, diff_loss = self.forward(data_batch, selfies_batch, context)
-            self.log('val_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_loss', loss, sync_dist=True, batch_size=batch_size)
+            
+            # Use helper methods for consistent val/ prefix
+            self.log_val('lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+            self.log_val('diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
+            self.log_val('loss', loss, sync_dist=True, batch_size=batch_size)
 
         elif dataloader_idx == 1:
+            # Test dataloader - perform conformer generation
             train_epoch_condition = (self.current_epoch + 1) % self.args.test_conform_epoch == 0 and self.args.mode == 'train'
             ## inference on the test set, using rdkit predicted conf as input
             eval_condition = self.args.mode in {'eval', 'eval_test_conform'}
             if not train_epoch_condition and not eval_condition:
                 return
+            
             with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
                 data_batch, sampled_positions, MAE_loss = self.sample(data_batch, selfies_batch)
+            
+            # Log property MAE as a test metric if available
+            if MAE_loss is not None and hasattr(self, 'condition_property'):
+                self.log_test(f"mae_{self.condition_property}", MAE_loss, sync_dist=True, batch_size=batch_size)
+            
+            # Accumulate rdmols for end-of-epoch conformer evaluation
             sampled_positions = sampled_positions.float().cpu().numpy()
             node_index = 0
             for i in range(len(data_batch.rdmol)):
@@ -600,18 +629,20 @@ class DiffussionPL(L.LightningModule):
         mat_mean = np.mean(mat_list)
         cov_median = np.median(cov_list)
         mat_median = np.median(mat_list)
-        self.log('valid/cov_mean', cov_mean, sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/mat_mean', mat_mean, sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/cov_median', cov_median, sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/mat_median', mat_median, sync_dist=True, batch_size=len(rdmol_list))
+        
+        # Use val/ prefix with standardized snake_case names
+        self.log_val('cov_mean', cov_mean, sync_dist=True, batch_size=len(rdmol_list))
+        self.log_val('mat_mean', mat_mean, sync_dist=True, batch_size=len(rdmol_list))
+        self.log_val('cov_median', cov_median, sync_dist=True, batch_size=len(rdmol_list))
+        self.log_val('mat_median', mat_median, sync_dist=True, batch_size=len(rdmol_list))
 
         eval_results_3d_unimol, _ = get_3D_edm_metric(predict_mol_list)
-        self.log('valid/MolStable_3D', eval_results_3d_unimol['mol_stable'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/AtomStable_3D', eval_results_3d_unimol['atom_stable'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/Validity_3D', eval_results_3d_unimol['Validity'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/Unique_3D', eval_results_3d_unimol['Unique'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/Novelty_3D', eval_results_3d_unimol['Novelty'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/Complete_3D', eval_results_3d_unimol['Complete'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log_val('mol_stable_3d', eval_results_3d_unimol['mol_stable'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log_val('atom_stable_3d', eval_results_3d_unimol['atom_stable'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log_val('validity_3d', eval_results_3d_unimol['Validity'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log_val('unique_3d', eval_results_3d_unimol['Unique'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log_val('novelty_3d', eval_results_3d_unimol['Novelty'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log_val('complete_3d', eval_results_3d_unimol['Complete'], sync_dist=True, batch_size=len(rdmol_list))
 
 
     @torch.compile(dynamic=True, disable=disable_compile)
