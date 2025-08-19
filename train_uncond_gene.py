@@ -11,6 +11,12 @@ from rdkit import RDLogger
 from data_provider.geom_drugs_jodo_dm import GeomDrugsJODODFDM
 from data_provider.qm9_jodo_dm import QM9DM
 
+# Suppress PyTorch deprecation warnings for cleaner logs
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_cuda' is deprecated")
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_cudnn' is deprecated")
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_mps' is deprecated")
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_mkldnn' is deprecated")
+
 disable_compile = torch.cuda.get_device_name(0).find('AMD') >= 0
 
 # os.environ['OPENBLAS_NUM_THREADS'] = '1'

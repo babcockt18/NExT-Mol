@@ -9,6 +9,12 @@ from data_provider.data_module import QM9DataModule, QM9LMDataModule, GeomDrugsL
 from data_provider.geom_drugs_jodo_dm import GeomDrugsJODODM
 from model.llm_pl import LLMPL
 
+# Suppress PyTorch deprecation warnings for cleaner logs
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_cuda' is deprecated")
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_cudnn' is deprecated")
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_mps' is deprecated")
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_mkldnn' is deprecated")
+
 # os.environ['OPENBLAS_NUM_THREADS'] = '1'
 ## for pyg bug
 warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')

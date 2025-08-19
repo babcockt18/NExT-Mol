@@ -12,6 +12,12 @@ import os
 from rdkit import RDLogger
 from model.ema import EMACallBack
 
+# Suppress PyTorch deprecation warnings for cleaner logs
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_cuda' is deprecated")
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_cudnn' is deprecated")
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_mps' is deprecated")
+warnings.filterwarnings('ignore', category=UserWarning, message="'has_mkldnn' is deprecated")
+
 disable_compile = torch.cuda.get_device_name(0).find('AMD') >= 0
 
 # os.environ['OPENBLAS_NUM_THREADS'] = '1'
