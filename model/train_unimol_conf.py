@@ -161,10 +161,10 @@ class UniMolConfTrain(L.LightningModule):
 
         batch_size = selfies_batch.input_ids.shape[0]
         self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], sync_dist=True, batch_size=batch_size)
-        self.log('train_loss', loss, sync_dist=True, batch_size=batch_size)
-        # self.log('train_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-        self.log('train_distance_loss', distance_loss, sync_dist=True, batch_size=batch_size)
-        self.log('train_coord_loss', coord_loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/loss', loss, sync_dist=True, batch_size=batch_size)
+        # self.log('train/lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/distance_loss', distance_loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/coord_loss', coord_loss, sync_dist=True, batch_size=batch_size)
         return loss
 
     def on_validation_epoch_start(self):
@@ -182,9 +182,9 @@ class UniMolConfTrain(L.LightningModule):
 
         loss, distance_loss, coord_loss, coords_predict_list = self.forward(rdmol_batch, return_conformers=True)
         batch_size = selfies_batch.input_ids.shape[0]
-        self.log('val_loss', loss, sync_dist=True, batch_size=batch_size)
-        self.log('val_distance_loss', distance_loss, sync_dist=True, batch_size=batch_size)
-        self.log('val_coord_loss', coord_loss, sync_dist=True, batch_size=batch_size)
+        self.log('val/loss', loss, sync_dist=True, batch_size=batch_size)
+        self.log('val/distance_loss', distance_loss, sync_dist=True, batch_size=batch_size)
+        self.log('val/coord_loss', coord_loss, sync_dist=True, batch_size=batch_size)
 
         ## prepare data for evaluation of the conformation generation performance
         rdmols = copy.deepcopy(rdmol_batch.rdmols)
@@ -239,17 +239,17 @@ class UniMolConfTrain(L.LightningModule):
         mat_mean = np.mean(mat_list)
         cov_median = np.median(cov_list)
         mat_median = np.median(mat_list)
-        self.log('cov_mean', cov_mean, sync_dist=True)
-        self.log('mat_mean', mat_mean, sync_dist=True)
-        self.log('cov_median', cov_median, sync_dist=True)
-        self.log('mat_median', mat_median, sync_dist=True)
+        self.log('val/cov_mean', cov_mean, sync_dist=True)
+        self.log('val/mat_mean', mat_mean, sync_dist=True)
+        self.log('val/cov_median', cov_median, sync_dist=True)
+        self.log('val/mat_median', mat_median, sync_dist=True)
 
         eval_results_3d_unimol, _ = get_3D_edm_metric(predict_mol_list)
-        self.log('MolStable_3D_unimol', eval_results_3d_unimol['mol_stable'], sync_dist=True)
-        self.log('AtomStable_3D_unimol', eval_results_3d_unimol['atom_stable'], sync_dist=True)
-        self.log('Validity_3D_unimol', eval_results_3d_unimol['Validity'], sync_dist=True)
-        self.log('Novelty_3D_unimol', eval_results_3d_unimol['Novelty'], sync_dist=True)
-        self.log('Complete_3D_unimol', eval_results_3d_unimol['Complete'], sync_dist=True)
+        self.log('val/mol_stable_3d_unimol', eval_results_3d_unimol['mol_stable'], sync_dist=True)
+        self.log('val/atom_stable_3d_unimol', eval_results_3d_unimol['atom_stable'], sync_dist=True)
+        self.log('val/validity_3d_unimol', eval_results_3d_unimol['Validity'], sync_dist=True)
+        self.log('val/novelty_3d_unimol', eval_results_3d_unimol['Novelty'], sync_dist=True)
+        self.log('val/complete_3d_unimol', eval_results_3d_unimol['Complete'], sync_dist=True)
 
 
     def forward(self, rdmol_batch, return_conformers=False):

@@ -248,10 +248,10 @@ class Mol123DGenerate(L.LightningModule):
 
         batch_size = selfies_batch.input_ids.shape[0]
         self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], sync_dist=True, batch_size=batch_size)
-        self.log('train_loss', loss, sync_dist=True, batch_size=batch_size)
-        self.log('train_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-        self.log('train_distance_loss', distance_loss, sync_dist=True, batch_size=batch_size)
-        self.log('train_coord_loss', coord_loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/loss', loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/distance_loss', distance_loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/coord_loss', coord_loss, sync_dist=True, batch_size=batch_size)
         return loss
 
     def on_validation_epoch_start(self):
@@ -271,10 +271,10 @@ class Mol123DGenerate(L.LightningModule):
 
             loss, lm_loss, distance_loss, coord_loss, coords_predict_list = self.forward(rdmol_batch, selfies_batch, return_conformers=True)
             batch_size = selfies_batch.input_ids.shape[0]
-            self.log('val_loss', loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_distance_loss', distance_loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_coord_loss', coord_loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/loss', loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/distance_loss', distance_loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/coord_loss', coord_loss, sync_dist=True, batch_size=batch_size)
 
             ## prepare data for evaluation of the conformation generation performance
             rdmols = copy.deepcopy(rdmol_batch.rdmols)
@@ -329,10 +329,10 @@ class Mol123DGenerate(L.LightningModule):
             mat_mean = np.mean(mat_list)
             cov_median = np.median(cov_list)
             mat_median = np.median(mat_list)
-            self.log('cov_mean', cov_mean, sync_dist=True)
-            self.log('mat_mean', mat_mean, sync_dist=True)
-            self.log('cov_median', cov_median, sync_dist=True)
-            self.log('mat_median', mat_median, sync_dist=True)
+            self.log('val/cov_mean', cov_mean, sync_dist=True)
+            self.log('val/mat_mean', mat_mean, sync_dist=True)
+            self.log('val/cov_median', cov_median, sync_dist=True)
+            self.log('val/mat_median', mat_median, sync_dist=True)
 
         if self.args.mode == 'delta_train':
             return
@@ -354,23 +354,23 @@ class Mol123DGenerate(L.LightningModule):
             sampled_rdmols = [Chem.MolFromSmiles(smiles) for smiles in sampled_canon_smiles]
             sampled_rdmols = [Chem.AddHs(mol) for mol in sampled_rdmols]
             eval_results_2d = get_2D_edm_metric(sampled_rdmols, self.trainer.datamodule.train_rdmols)
-            self.log('MolStable', eval_results_2d['mol_stable'], sync_dist=True)
-            self.log('AtomStable', eval_results_2d['atom_stable'], sync_dist=True)
-            self.log('Validity', eval_results_2d['Validity'], sync_dist=True)
-            self.log('Novelty', eval_results_2d['Novelty'], sync_dist=True)
-            self.log('Complete', eval_results_2d['Complete'], sync_dist=True)
+            self.log('test/mol_stable', eval_results_2d['mol_stable'], sync_dist=True)
+            self.log('test/atom_stable', eval_results_2d['atom_stable'], sync_dist=True)
+            self.log('test/validity', eval_results_2d['Validity'], sync_dist=True)
+            self.log('test/novelty', eval_results_2d['Novelty'], sync_dist=True)
+            self.log('test/complete', eval_results_2d['Complete'], sync_dist=True)
 
             moses_metrics = self.trainer.datamodule.get_moses_metrics(sampled_rdmols)
-            self.log('FCD', moses_metrics['FCD'], sync_dist=True)
-            self.log('SNN', moses_metrics['SNN'], sync_dist=True)
-            self.log('Frag', moses_metrics['Frag'], sync_dist=True)
-            self.log('Scaf', moses_metrics['Scaf'], sync_dist=True)
-            self.log('IntDiv', moses_metrics['IntDiv'], sync_dist=True)
-            self.log('Filters', moses_metrics['Filters'], sync_dist=True)
-            self.log('QED', moses_metrics['QED'], sync_dist=True)
-            self.log('SA', moses_metrics['SA'], sync_dist=True)
-            self.log('logP', moses_metrics['logP'], sync_dist=True)
-            self.log('weight', moses_metrics['weight'], sync_dist=True)
+            self.log('test/fcd', moses_metrics['FCD'], sync_dist=True)
+            self.log('test/snn', moses_metrics['SNN'], sync_dist=True)
+            self.log('test/frag', moses_metrics['Frag'], sync_dist=True)
+            self.log('test/scaf', moses_metrics['Scaf'], sync_dist=True)
+            self.log('test/intdiv', moses_metrics['IntDiv'], sync_dist=True)
+            self.log('test/filters', moses_metrics['Filters'], sync_dist=True)
+            self.log('test/qed', moses_metrics['QED'], sync_dist=True)
+            self.log('test/sa', moses_metrics['SA'], sync_dist=True)
+            self.log('test/logp', moses_metrics['logP'], sync_dist=True)
+            self.log('test/weight', moses_metrics['weight'], sync_dist=True)
 
             if self.args.mode == 'eval_1d_gen':
                 return
@@ -405,25 +405,25 @@ class Mol123DGenerate(L.LightningModule):
             sub_geometry_metric_rdkit = self.trainer.datamodule.get_sub_geometry_metric(rdkit_predict_mols)
 
 
-            self.log('MolStable_3D_unimol', eval_results_3d_unimol['mol_stable'], sync_dist=True)
-            self.log('AtomStable_3D_unimol', eval_results_3d_unimol['atom_stable'], sync_dist=True)
-            self.log('Validity_3D_unimol', eval_results_3d_unimol['Validity'], sync_dist=True)
-            self.log('Novelty_3D_unimol', eval_results_3d_unimol['Novelty'], sync_dist=True)
-            self.log('Complete_3D_unimol', eval_results_3d_unimol['Complete'], sync_dist=True)
+            self.log('test/mol_stable_3d_unimol', eval_results_3d_unimol['mol_stable'], sync_dist=True)
+            self.log('test/atom_stable_3d_unimol', eval_results_3d_unimol['atom_stable'], sync_dist=True)
+            self.log('test/validity_3d_unimol', eval_results_3d_unimol['Validity'], sync_dist=True)
+            self.log('test/novelty_3d_unimol', eval_results_3d_unimol['Novelty'], sync_dist=True)
+            self.log('test/complete_3d_unimol', eval_results_3d_unimol['Complete'], sync_dist=True)
 
-            self.log('MolStable_3D_rdkit', eval_results_3d_rdkit['mol_stable'], sync_dist=True)
-            self.log('AtomStable_3D_rdkit', eval_results_3d_rdkit['atom_stable'], sync_dist=True)
-            self.log('Validity_3D_rdkit', eval_results_3d_rdkit['Validity'], sync_dist=True)
-            self.log('Novelty_3D_rdkit', eval_results_3d_rdkit['Novelty'], sync_dist=True)
-            self.log('Complete_3D_rdkit', eval_results_3d_rdkit['Complete'], sync_dist=True)
+            self.log('test/mol_stable_3d_rdkit', eval_results_3d_rdkit['mol_stable'], sync_dist=True)
+            self.log('test/atom_stable_3d_rdkit', eval_results_3d_rdkit['atom_stable'], sync_dist=True)
+            self.log('test/validity_3d_rdkit', eval_results_3d_rdkit['Validity'], sync_dist=True)
+            self.log('test/novelty_3d_rdkit', eval_results_3d_rdkit['Novelty'], sync_dist=True)
+            self.log('test/complete_3d_rdkit', eval_results_3d_rdkit['Complete'], sync_dist=True)
 
-            self.log('bond_length_mean_unimol', sub_geometry_metric['bond_length_mean'], sync_dist=True)
-            self.log('bond_angle_mean_unimol', sub_geometry_metric['bond_angle_mean'], sync_dist=True)
-            self.log('dihedral_angle_mean_unimol', sub_geometry_metric['dihedral_angle_mean'], sync_dist=True)
+            self.log('test/bond_length_mean_unimol', sub_geometry_metric['bond_length_mean'], sync_dist=True)
+            self.log('test/bond_angle_mean_unimol', sub_geometry_metric['bond_angle_mean'], sync_dist=True)
+            self.log('test/dihedral_angle_mean_unimol', sub_geometry_metric['dihedral_angle_mean'], sync_dist=True)
 
-            self.log('bond_length_mean_rdkit', sub_geometry_metric_rdkit['bond_length_mean'], sync_dist=True)
-            self.log('bond_angle_mean_rdkit', sub_geometry_metric_rdkit['bond_angle_mean'], sync_dist=True)
-            self.log('dihedral_angle_mean_rdkit', sub_geometry_metric_rdkit['dihedral_angle_mean'], sync_dist=True)
+            self.log('test/bond_length_mean_rdkit', sub_geometry_metric_rdkit['bond_length_mean'], sync_dist=True)
+            self.log('test/bond_angle_mean_rdkit', sub_geometry_metric_rdkit['bond_angle_mean'], sync_dist=True)
+            self.log('test/dihedral_angle_mean_rdkit', sub_geometry_metric_rdkit['dihedral_angle_mean'], sync_dist=True)
 
 
     @torch.no_grad()

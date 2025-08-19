@@ -317,9 +317,9 @@ class Mol123DGenerateDiffusion(L.LightningModule):
 
         batch_size = selfies_batch.input_ids.shape[0]
         self.log('lr', self.trainer.optimizers[0].param_groups[0]['lr'], sync_dist=True, batch_size=batch_size)
-        self.log('train_loss', loss, sync_dist=True, batch_size=batch_size)
-        self.log('train_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-        self.log('train_coordinate_loss', coordinate_loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/loss', loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+        self.log('train/coordinate_loss', coordinate_loss, sync_dist=True, batch_size=batch_size)
         return loss
 
     def on_validation_epoch_start(self):
@@ -335,9 +335,9 @@ class Mol123DGenerateDiffusion(L.LightningModule):
             with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
                 loss, lm_loss, coordinate_loss = self.forward(data_batch, selfies_batch)
 
-            self.log('val_loss', loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
-            self.log('val_coordinate_loss', coordinate_loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/loss', loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/lm_loss', lm_loss, sync_dist=True, batch_size=batch_size)
+            self.log('val/coordinate_loss', coordinate_loss, sync_dist=True, batch_size=batch_size)
 
             train_epoch_condition = (self.current_epoch + 1) % self.args.conform_eval_epoch == 0 and self.args.mode == 'train'
             eval_condition = self.args.mode in {'eval', 'eval_conf'}
@@ -463,18 +463,18 @@ class Mol123DGenerateDiffusion(L.LightningModule):
         mat_mean = np.mean(mat_list)
         cov_median = np.median(cov_list)
         mat_median = np.median(mat_list)
-        self.log('valid/cov_mean', cov_mean, sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/mat_mean', mat_mean, sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/cov_median', cov_median, sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/mat_median', mat_median, sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/cov_mean', cov_mean, sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/mat_mean', mat_mean, sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/cov_median', cov_median, sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/mat_median', mat_median, sync_dist=True, batch_size=len(rdmol_list))
 
         eval_results_3d_unimol = get_3D_edm_metric(predict_mol_list)
-        self.log('valid/MolStable_3D', eval_results_3d_unimol['mol_stable'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/AtomStable_3D', eval_results_3d_unimol['atom_stable'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/Validity_3D', eval_results_3d_unimol['Validity'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/Unique_3D', eval_results_3d_unimol['Unique'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/Novelty_3D', eval_results_3d_unimol['Novelty'], sync_dist=True, batch_size=len(rdmol_list))
-        self.log('valid/Complete_3D', eval_results_3d_unimol['Complete'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/mol_stable_3d', eval_results_3d_unimol['mol_stable'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/atom_stable_3d', eval_results_3d_unimol['atom_stable'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/validity_3d', eval_results_3d_unimol['Validity'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/unique_3d', eval_results_3d_unimol['Unique'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/novelty_3d', eval_results_3d_unimol['Novelty'], sync_dist=True, batch_size=len(rdmol_list))
+        self.log('val/complete_3d', eval_results_3d_unimol['Complete'], sync_dist=True, batch_size=len(rdmol_list))
 
     def inference_eval(self, predict_rdmol_list, gt_conf_list_list, threshold, num_failures):
         def calc_performance_stats(rmsd_array, threshold):
@@ -543,12 +543,12 @@ class Mol123DGenerateDiffusion(L.LightningModule):
 
         predict_rdmol_list = [data[2] for data in predict_rdmol_list]
         eval_results_3d_unimol = get_3D_edm_metric(predict_rdmol_list)
-        self.log('test/MolStable_3D', eval_results_3d_unimol['mol_stable'], sync_dist=False, batch_size=len(predict_rdmol_list))
-        self.log('test/AtomStable_3D', eval_results_3d_unimol['atom_stable'], sync_dist=False, batch_size=len(predict_rdmol_list))
-        self.log('test/Validity_3D', eval_results_3d_unimol['Validity'], sync_dist=False, batch_size=len(predict_rdmol_list))
-        self.log('test/Unique_3D', eval_results_3d_unimol['Unique'], sync_dist=False, batch_size=len(predict_rdmol_list))
-        self.log('test/Novelty_3D', eval_results_3d_unimol['Novelty'], sync_dist=False, batch_size=len(predict_rdmol_list))
-        self.log('test/Complete_3D', eval_results_3d_unimol['Complete'], sync_dist=False, batch_size=len(predict_rdmol_list))
+        self.log('test/mol_stable_3d', eval_results_3d_unimol['mol_stable'], sync_dist=False, batch_size=len(predict_rdmol_list))
+        self.log('test/atom_stable_3d', eval_results_3d_unimol['atom_stable'], sync_dist=False, batch_size=len(predict_rdmol_list))
+        self.log('test/validity_3d', eval_results_3d_unimol['Validity'], sync_dist=False, batch_size=len(predict_rdmol_list))
+        self.log('test/unique_3d', eval_results_3d_unimol['Unique'], sync_dist=False, batch_size=len(predict_rdmol_list))
+        self.log('test/novelty_3d', eval_results_3d_unimol['Novelty'], sync_dist=False, batch_size=len(predict_rdmol_list))
+        self.log('test/complete_3d', eval_results_3d_unimol['Complete'], sync_dist=False, batch_size=len(predict_rdmol_list))
 
 
     @torch.no_grad()
