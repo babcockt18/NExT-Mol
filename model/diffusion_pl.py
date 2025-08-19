@@ -502,6 +502,7 @@ class DiffussionPL(L.LightningModule):
 
     def on_validation_epoch_start(self):
         self.test_rdmol_list = []
+        self.test_metrics = {}  # Store test metrics to log after validation
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
@@ -581,7 +582,21 @@ class DiffussionPL(L.LightningModule):
                 if self.save_eval_only:
                     with open(log_dir / 'predict.pkl', 'wb') as f:
                         pickle.dump((test_rdmol_list, threshold, num_failures), f)
-                metrics = conformer_evaluation_V2(test_rdmol_list, self.trainer.datamodule.test_dataset.gt_conf_list, threshold, num_failures, logger=self, dataset_name=self.args.dataset, num_process=10)
+                # Don't log metrics during evaluation, just return them
+                metrics = conformer_evaluation_V2(test_rdmol_list, self.trainer.datamodule.test_dataset.gt_conf_list, threshold, num_failures, logger=None, dataset_name=self.args.dataset, num_process=10)
+                # Store metrics to log later
+                self.test_metrics = metrics
+        
+        # Log test metrics after all validation steps are complete
+        if hasattr(self, 'test_metrics') and self.test_metrics:
+            for metric in ['recall_coverage_mean', 'recall_coverage_median', 'recall_amr_mean', 'recall_amr_median', 
+                           'precision_coverage_mean', 'precision_coverage_median', 'precision_amr_mean', 'precision_amr_median']:
+                if metric in self.test_metrics:
+                    self.log(f"test/{metric}", self.test_metrics[metric], sync_dist=False)
+            for metric in ['MolStable_3D', 'AtomStable_3D', 'Validity_3D', 'Unique_3D', 'Novelty_3D', 'Complete_3D']:
+                if metric in self.test_metrics:
+                    self.log(f"test/{metric}", self.test_metrics[metric], sync_dist=False)
+            self.test_metrics = {}  # Clear for next epoch
 
     def simple_validation_eval(self, rdmol_list, threshold):
         '''
@@ -1100,6 +1115,7 @@ def conformer_evaluation_V2(predict_rdmol_list, gt_conf_list_list, threshold, nu
     print(metrics)
 
     if logger is not None:
+        # Log metrics using the standard Lightning approach
         for metric in ['recall_coverage_mean', 'recall_coverage_median', 'recall_amr_mean', 'recall_amr_median', 'precision_coverage_mean', 'precision_coverage_median', 'precision_amr_mean', 'precision_amr_median']:
             logger.log(f"test/{metric}", metrics[metric], sync_dist=False, batch_size=len(predict_rdmol_list), on_epoch=True, on_step=False, add_dataloader_idx=False)
         for metric in ['MolStable', 'AtomStable', 'Validity', 'Unique', 'Novelty', 'Complete']:
