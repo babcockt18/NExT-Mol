@@ -275,28 +275,45 @@ class QM9TorDFDataModule(L.LightningDataModule):
         return loader
 
     def val_dataloader(self):
-        print('validating')
-        val_loader = DataLoader(
-            self.valid_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False,
-            drop_last=False,
-            persistent_workers=False,
-            collate_fn=QM9Collater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, self.aug_rotation, self.t_cond, self.use_eigvec, self.disable_com, self.aug_translation),
-        )
-        test_loader = DataLoader(
-            self.test_dataset,
-            batch_size=self.infer_batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False,
-            drop_last=False,
-            persistent_workers=False,
-            collate_fn=QM9InferCollater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, use_eigvec=self.use_eigvec, disable_com=self.disable_com),
-        )
-        return [val_loader, test_loader]
+        # Check if we're in evaluation-only mode
+        if hasattr(self.args, 'mode') and self.args.mode in {'eval', 'eval_gen', 'eval_conf', 'eval_test_conform'}:
+            # For evaluation modes, only return test dataloader to avoid unnecessary validation dataset loading
+            print(f'Evaluation mode: {self.args.mode} - loading test dataset only')
+            test_loader = DataLoader(
+                self.test_dataset,
+                batch_size=self.infer_batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=False,
+                drop_last=False,
+                persistent_workers=False,
+                collate_fn=QM9InferCollater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, use_eigvec=self.use_eigvec, disable_com=self.disable_com),
+            )
+            return test_loader
+        else:
+            # For training mode, return both validation and test dataloaders
+            print('Training mode - loading validation and test datasets')
+            val_loader = DataLoader(
+                self.valid_dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=False,
+                drop_last=False,
+                persistent_workers=False,
+                collate_fn=QM9Collater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, self.aug_rotation, self.t_cond, self.use_eigvec, self.disable_com, self.aug_translation),
+            )
+            test_loader = DataLoader(
+                self.test_dataset,
+                batch_size=self.infer_batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=False,
+                drop_last=False,
+                persistent_workers=False,
+                collate_fn=QM9InferCollater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, use_eigvec=self.use_eigvec, disable_com=self.disable_com),
+            )
+            return [val_loader, test_loader]
 
 
     def add_model_specific_args(parent_parser):
@@ -465,29 +482,48 @@ class GeomDrugsTorDFDataModule(L.LightningDataModule):
         return loader
 
     def val_dataloader(self):
-        val_loader = DataLoader(
-            self.valid_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False,
-            drop_last=False,
-            persistent_workers=False,
-            sampler=DistributedSampler(self.valid_dataset, num_replicas=self.world_size, rank=self.global_rank, shuffle=False, drop_last=False, seed=0),
-            collate_fn=QM9Collater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, self.aug_rotation, self.t_cond, self.use_eigvec, self.disable_com, self.aug_translation),
-        )
-        test_loader = DataLoader(
-            self.test_dataset,
-            batch_size=self.infer_batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False,
-            drop_last=False,
-            persistent_workers=False,
-            sampler=DistributedSampler(self.test_dataset, num_replicas=self.world_size, rank=self.global_rank, shuffle=False, drop_last=False, seed=0),
-            collate_fn=QM9InferCollater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, use_eigvec=self.use_eigvec, disable_com=self.disable_com),
-        )
-        return [val_loader, test_loader]
+        # Check if we're in evaluation-only mode
+        if hasattr(self.args, 'mode') and self.args.mode in {'eval', 'eval_gen', 'eval_conf', 'eval_test_conform'}:
+            # For evaluation modes, only return test dataloader to avoid unnecessary validation dataset loading
+            print(f'Evaluation mode: {self.args.mode} - loading test dataset only')
+            test_loader = DataLoader(
+                self.test_dataset,
+                batch_size=self.infer_batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=False,
+                drop_last=False,
+                persistent_workers=False,
+                sampler=DistributedSampler(self.test_dataset, num_replicas=self.world_size, rank=self.global_rank, shuffle=False, drop_last=False, seed=0),
+                collate_fn=QM9InferCollater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, use_eigvec=self.use_eigvec, disable_com=self.disable_com),
+            )
+            return test_loader
+        else:
+            # For training mode, return both validation and test dataloaders
+            print('Training mode - loading validation and test datasets')
+            val_loader = DataLoader(
+                self.valid_dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=False,
+                drop_last=False,
+                persistent_workers=False,
+                sampler=DistributedSampler(self.valid_dataset, num_replicas=self.world_size, rank=self.global_rank, shuffle=False, drop_last=False, seed=0),
+                collate_fn=QM9Collater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, self.aug_rotation, self.t_cond, self.use_eigvec, self.disable_com, self.aug_translation),
+            )
+            test_loader = DataLoader(
+                self.test_dataset,
+                batch_size=self.infer_batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=False,
+                drop_last=False,
+                persistent_workers=False,
+                sampler=DistributedSampler(self.test_dataset, num_replicas=self.world_size, rank=self.global_rank, shuffle=False, drop_last=False, seed=0),
+                collate_fn=QM9InferCollater(self.max_atoms, self.max_sf_tokens, self.selfies_tokenizer, self.noise_scheduler, use_eigvec=self.use_eigvec, disable_com=self.disable_com),
+            )
+            return [val_loader, test_loader]
 
 
     def add_model_specific_args(parent_parser):
