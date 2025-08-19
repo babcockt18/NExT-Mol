@@ -510,8 +510,12 @@ class DiffussionPL(L.LightningModule):
         data_batch, selfies_batch = batch
         batch_size = len(data_batch.smiles)
 
-        if dataloader_idx == 0:
+        # Check if we're in eval_test_conform mode where we only have test dataloader
+        eval_test_only = self.args.mode in {'eval', 'eval_test_conform'}
+        
+        if dataloader_idx == 0 and not eval_test_only:
             # Validation dataloader - compute and log validation losses
+            # This only happens during training mode when we have both val and test dataloaders
             train_epoch_condition = (self.current_epoch + 1) % self.args.conform_eval_epoch == 0 and self.args.mode == 'train'
             with torch.cuda.amp.autocast(dtype=get_precision(self.trainer.precision)):
                 context = getattr(data_batch, 'context', None)
@@ -522,8 +526,9 @@ class DiffussionPL(L.LightningModule):
             self.log_val('diff_loss', diff_loss, sync_dist=True, batch_size=batch_size)
             self.log_val('loss', loss, sync_dist=True, batch_size=batch_size)
 
-        elif dataloader_idx == 1:
+        elif dataloader_idx == 1 or eval_test_only:
             # Test dataloader - perform conformer generation
+            # In eval_test_conform mode, we only have one dataloader (test) with idx=0
             train_epoch_condition = (self.current_epoch + 1) % self.args.test_conform_epoch == 0 and self.args.mode == 'train'
             ## inference on the test set, using rdkit predicted conf as input
             eval_condition = self.args.mode in {'eval', 'eval_test_conform'}
