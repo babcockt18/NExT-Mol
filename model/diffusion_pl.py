@@ -473,6 +473,9 @@ class DiffussionPL(L.LightningModule):
 
     def log_test(self, key, value, **kwargs):
         """Log test metrics with test/ prefix"""
+        # Set add_dataloader_idx=False by default for test metrics to prevent duplication
+        if 'add_dataloader_idx' not in kwargs:
+            kwargs['add_dataloader_idx'] = False
         self.log(f"test/{key}", value, **kwargs)
 
     def training_step(self, batch):
@@ -1097,8 +1100,8 @@ def conformer_evaluation_V2(predict_rdmol_list, gt_conf_list_list, threshold, nu
 
     if logger is not None:
         for metric in ['recall_coverage_mean', 'recall_coverage_median', 'recall_amr_mean', 'recall_amr_median', 'precision_coverage_mean', 'precision_coverage_median', 'precision_amr_mean', 'precision_amr_median']:
-            logger.log(f"test/{metric}", metrics[metric], sync_dist=False, batch_size=len(predict_rdmol_list))
+            logger.log(f"test/{metric}", metrics[metric], sync_dist=False, batch_size=len(predict_rdmol_list), add_dataloader_idx=False)
         for metric in ['MolStable', 'AtomStable', 'Validity', 'Unique', 'Novelty', 'Complete']:
-            logger.log(f"test/{metric}_3D", metrics[f"{metric}_3D"], sync_dist=False, batch_size=len(predict_rdmol_list))
+            logger.log(f"test/{metric}_3D", metrics[f"{metric}_3D"], sync_dist=False, batch_size=len(predict_rdmol_list), add_dataloader_idx=False)
 
     return metrics
