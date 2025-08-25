@@ -416,6 +416,8 @@ class GeomDrugsTorDFDataModule(L.LightningDataModule):
         self.add_unseen_selfies_tokens(self.selfies_tokenizer, root)
 
         self.transform = None
+        self.prop_norms = None
+        self.prop_dist = None
 
         rand_smiles = args.rand_smiles
         addHs = args.addHs
